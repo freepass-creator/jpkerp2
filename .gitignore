@@ -1,0 +1,25 @@
+node_modules
+.next
+out
+dist
+coverage
+.turbo
+
+# env
+.env
+.env.local
+.env.*.local
+
+# firebase
+functions/lib
+functions/node_modules
+.firebase
+scripts/serviceAccount.json
+
+# editor / os
+.DS_Store
+.vscode/settings.json
+.idea
+
+# next
+next-env.d.ts
