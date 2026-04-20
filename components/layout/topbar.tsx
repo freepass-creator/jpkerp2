@@ -34,8 +34,8 @@ export function Topbar() {
       <div style={{ flex: 1, minWidth: 0 }} />
       <div className="topbar-center">
         {crumbs.length > 0 && (
-          <span style={{ color: 'var(--c-text-sub)' }}>
-            {crumbs.join(' / ')}
+          <span className="text-text-sub">
+            {crumbs.join(' > ')}
           </span>
         )}
       </div>

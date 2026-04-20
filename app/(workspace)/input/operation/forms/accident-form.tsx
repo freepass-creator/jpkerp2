@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { OpFormBase } from '../op-form-base';
 import { Field, TextInput, NumberInput, TextArea, PhoneInput } from '@/components/form/field';
-import { BtnGroup } from '@/components/form/btn-group';
+import { BtnGroup, BtnGroupMulti } from '@/components/form/btn-group';
 import { FavChips } from '@/components/form/fav-chips';
 import { useInsuranceCompanies, useTitles, useLocations } from '@/lib/hooks/useOpPrefs';
 
@@ -77,38 +77,32 @@ export function AccidentForm() {
         <i className="ph ph-car-profile" />사고 접수
       </div>
       <div className="form-grid">
-        <Field label="사고형태" required span={3}>
-          <BtnGroup value={accType} onChange={setAccType} options={ACC_TYPES} />
+        <div className="form-row" style={{ gridColumn: '1 / -1' }}>
+          <Field label="사고형태" required>
+            <BtnGroup value={accType} onChange={setAccType} options={ACC_TYPES} />
+          </Field>
+          <Field label="가해/피해" required>
+            <BtnGroup value={role} onChange={setRole} options={ROLES} />
+          </Field>
+        </div>
+        <Field label="보험유형 (복수선택)" span={2}>
+          <BtnGroupMulti
+            options={INS_OPTIONS.map((o) => ({ value: o.key, label: o.label }))}
+            values={insFlags}
+            onChange={setInsFlags}
+          />
         </Field>
-        <Field label="가해/피해" required span={3}>
-          <BtnGroup value={role} onChange={setRole} options={ROLES} />
-        </Field>
-        <Field label="보험유형 (복수선택)" span={3}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {INS_OPTIONS.map((opt) => (
-              <label key={opt.key} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
-                <input
-                  type="checkbox"
-                  checked={insFlags[opt.key]}
-                  onChange={() => toggleIns(opt.key)}
-                  style={{ width: 14, height: 14 }}
-                />
-                {opt.label}
-              </label>
-            ))}
-          </div>
-        </Field>
-        <Field label="진행 상태" required span={3}>
+        <Field label="진행 상태" required span={2}>
           <BtnGroup value={status} onChange={setStatus} options={STATUS} />
         </Field>
-        <Field label="내 과실 (%)" span={3}>
+        <Field label="내 과실 (%)" span={2}>
           <BtnGroup value={faultPct} onChange={setFaultPct} options={FAULT_STEPS} />
         </Field>
-        <Field label="대차" span={3}>
+        <Field label="대차" span={2}>
           <BtnGroup value={rental} onChange={setRental} options={RENTAL} />
         </Field>
         {/* 우리쪽 */}
-        <Field label="우리 보험사" span={3}>
+        <Field label="우리 보험사" span={2}>
           <TextInput
             value={ourInsurance}
             onChange={(e) => setOurInsurance(e.target.value)}
@@ -133,7 +127,7 @@ export function AccidentForm() {
         <Field label="상대방 연락처">
           <PhoneInput value={otherPhone} onChange={setOtherPhone} />
         </Field>
-        <Field label="상대 보험사" span={3}>
+        <Field label="상대 보험사" span={2}>
           <TextInput
             value={otherInsurance}
             onChange={(e) => setOtherInsurance(e.target.value)}
@@ -147,7 +141,7 @@ export function AccidentForm() {
         <Field label="상대 담당자 연락처" span={2}>
           <PhoneInput value={otherInsContact} onChange={setOtherInsContact} />
         </Field>
-        <Field label="사고 장소" span={3}>
+        <Field label="사고 장소" span={2}>
           <TextInput
             value={location}
             onChange={(e) => setLocation(e.target.value)}
@@ -174,7 +168,7 @@ export function AccidentForm() {
             }}
           />
         </Field>
-        <Field label="상세 내용" span={3}>
+        <Field label="상세 내용" span={2}>
           <TextArea name="memo" rows={3} placeholder="사고 경위·조치 사항·증빙" />
         </Field>
       </div>

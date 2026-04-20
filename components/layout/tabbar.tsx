@@ -54,7 +54,7 @@ export function TabBar() {
                 close(tab.id);
               }}
             >
-              <i className="ph ph-x" style={{ fontSize: 10 }} />
+              <i className="ph ph-x text-2xs" />
             </button>
           </div>
         );

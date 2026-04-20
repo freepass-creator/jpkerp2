@@ -110,7 +110,7 @@ export function CutoverTool() {
 
   return (
     <div className="flex flex-col" style={{ height: '100%' }}>
-      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--c-border)', fontSize: 12 }}>
+      <div className="text-base" style={{ padding: '10px 14px', borderBottom: '1px solid var(--c-border)' }}>
         <i className="ph ph-currency-krw" style={{ marginRight: 4 }} />
         전체 <b>{fmt(rows.length)}</b>건 ·
         <span className="text-text-muted"> 불일치 </span>

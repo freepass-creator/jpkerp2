@@ -130,11 +130,11 @@ export function InputContextPanel({ selected }: Props) {
         const content = (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-              <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--c-text)' }}>{r.primary}</span>
-              <span style={{ fontSize: 10, color: 'var(--c-text-muted)' }}>{r.when}</span>
+              <span className="text-base text-text" style={{ fontWeight: 600 }}>{r.primary}</span>
+              <span className="text-2xs text-text-muted">{r.when}</span>
             </div>
             {r.secondary && (
-              <div style={{ fontSize: 11, color: 'var(--c-text-sub)', marginTop: 2 }}>{r.secondary}</div>
+              <div className="text-xs text-text-sub" style={{ marginTop: 2 }}>{r.secondary}</div>
             )}
           </>
         );

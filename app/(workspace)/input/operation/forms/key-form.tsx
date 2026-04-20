@@ -64,7 +64,7 @@ export function KeyForm() {
         <i className="ph ph-key" />차키 업무
       </div>
       <div className="form-grid">
-        <Field label="구분" required span={3}>
+        <Field label="구분" required span={2}>
           <BtnGroup value={keyAction} onChange={setKeyAction} options={ACTIONS} />
         </Field>
       </div>
@@ -75,7 +75,7 @@ export function KeyForm() {
           {KEY_FIELDS.map((it) => (
             <label
               key={it.key}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}
+              className="text-base" style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
             >
               <input
                 type="checkbox"
@@ -92,10 +92,10 @@ export function KeyForm() {
       <div className="form-section">
         <div className="form-section-title"><i className="ph ph-note" />메모</div>
         <div className="form-grid">
-          <Field label="키번호 / 보관 위치" span={3}>
+          <Field label="키번호 / 보관 위치" span={2}>
             <TextInput name="key_info" placeholder="키번호 또는 보관 위치" />
           </Field>
-          <Field label="상세 메모" span={3}>
+          <Field label="상세 메모" span={2}>
             <TextArea name="memo" rows={2} placeholder="특이사항" />
           </Field>
         </div>

@@ -59,7 +59,7 @@ export function EventDetailPanel({ event }: Props) {
         style={{ height: '100%', minHeight: 200, gap: 8 }}
       >
         <i className="ph ph-cursor-click" style={{ fontSize: 32, opacity: 0.4 }} />
-        <span style={{ fontSize: 12 }}>좌측 목록에서 이벤트를 클릭하세요</span>
+        <span className="text-base">좌측 목록에서 이벤트를 클릭하세요</span>
       </div>
     );
   }
@@ -89,50 +89,35 @@ export function EventDetailPanel({ event }: Props) {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <i className={`ph ${meta.icon}`} style={{ color: meta.color, fontSize: 18 }} />
-          <span style={{ fontWeight: 600, fontSize: 13 }}>{meta.label}</span>
-          <span className="text-text-muted" style={{ fontSize: 11, marginLeft: 'auto' }}>
+          <i className={`ph ${meta.icon} text-[18px]`} style={{ color: meta.color }} />
+          <span className="text-xl" style={{ fontWeight: 600 }}>{meta.label}</span>
+          <span className="text-text-muted text-xs" style={{ marginLeft: 'auto' }}>
             {event.date ? fmtDate(event.date) : '—'}
           </span>
         </div>
         {event.car_number && (
           <Link
             href={`/asset/${encodeURIComponent(event.car_number)}`}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              fontSize: 12,
-              color: 'var(--c-primary)',
-              textDecoration: 'none',
-              fontWeight: 600,
-            }}
+            className="text-base text-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none', fontWeight: 600 }}
           >
             <i className="ph ph-car" />
             {event.car_number}
           </Link>
         )}
         {event.title && (
-          <div style={{ fontSize: 12, color: 'var(--c-text)', marginTop: 4 }}>{event.title}</div>
+          <div className="text-base text-text" style={{ marginTop: 4 }}>{event.title}</div>
         )}
       </div>
 
       <dl
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'auto 1fr',
-          gap: '6px 14px',
-          padding: '12px 16px',
-          margin: 0,
-          fontSize: 12,
-        }}
+        className="text-base" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 14px', padding: '12px 16px', margin: 0 }}
       >
         {entries.map(([k, v]) => (
           <div key={k} style={{ display: 'contents' }}>
-            <dt style={{ color: 'var(--c-text-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+            <dt className="text-text-muted" style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
               {LABELS[k] ?? k}
             </dt>
-            <dd style={{ margin: 0, color: 'var(--c-text)', wordBreak: 'break-word' }}>
+            <dd className="text-text" style={{ margin: 0, wordBreak: 'break-word' }}>
               {formatValue(k, v)}
             </dd>
           </div>
@@ -141,7 +126,7 @@ export function EventDetailPanel({ event }: Props) {
 
       {photos.length > 0 && (
         <div style={{ padding: '8px 16px 16px' }}>
-          <div style={{ fontSize: 11, color: 'var(--c-text-muted)', fontWeight: 500, marginBottom: 6 }}>
+          <div className="text-xs text-text-muted" style={{ fontWeight: 500, marginBottom: 6 }}>
             첨부 ({photos.length})
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>

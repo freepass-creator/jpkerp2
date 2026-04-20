@@ -8,6 +8,10 @@ import { toast } from 'sonner';
 import { ref as rtdbRef, push, set } from 'firebase/database';
 import { getRtdb } from '@/lib/firebase/rtdb';
 import { parseCsvObjects } from '@/lib/csv';
+import { ocrFile, extractCarNumber, extractAmount, extractDate } from '@/lib/ocr';
+import { useRtdbCollection } from '@/lib/collections/rtdb';
+import { normalizeAsset } from '@/lib/asset-normalize';
+import type { RtdbCarModel } from '@/lib/types/rtdb-entities';
 import { deriveBillingsFromContract } from '@/lib/derive/billings';
 import type { RtdbContract } from '@/lib/types/rtdb-entities';
 import type { ColDef } from 'ag-grid-community';
@@ -179,6 +183,58 @@ function mapHeaders(rows: Array<Record<string, string>>, schema: SchemaField[]):
   });
 }
 
+// ───────── 차종마스터 매칭 ─────────
+function matchVehicleMaster(rows: Array<Record<string, unknown>>, masters: RtdbCarModel[]): Array<Record<string, unknown>> {
+  if (!masters.length) return rows;
+  const byMakerModel = new Map<string, RtdbCarModel[]>();
+  const byMaker = new Map<string, RtdbCarModel[]>();
+  for (const m of masters) {
+    if (m.status === 'deleted') continue;
+    const mk = (m.maker ?? '').trim();
+    const md = (m.model ?? '').trim();
+    if (!mk) continue;
+    const key = `${mk}|${md}`.toLowerCase();
+    if (!byMakerModel.has(key)) byMakerModel.set(key, []);
+    byMakerModel.get(key)!.push(m);
+    if (!byMaker.has(mk.toLowerCase())) byMaker.set(mk.toLowerCase(), []);
+    byMaker.get(mk.toLowerCase())!.push(m);
+  }
+  return rows.map((row) => {
+    const maker = String(row.manufacturer ?? row.maker ?? '').trim();
+    const model = String(row.car_model ?? row.model ?? '').trim();
+    const detail = String(row.detail_model ?? row.sub ?? '').trim();
+    if (!maker) return row;
+    let candidates = byMakerModel.get(`${maker}|${model}`.toLowerCase());
+    if (!candidates?.length) candidates = byMaker.get(maker.toLowerCase());
+    if (!candidates?.length) return row;
+    let best = candidates[0];
+    if (detail) {
+      const exact = candidates.find((c) => (c.sub ?? '').toLowerCase() === detail.toLowerCase());
+      if (exact) best = exact;
+      else {
+        const partial = candidates.find((c) =>
+          (c.sub ?? '').toLowerCase().includes(detail.toLowerCase()) ||
+          detail.toLowerCase().includes((c.sub ?? '').toLowerCase()),
+        );
+        if (partial) best = partial;
+      }
+    }
+    const enriched = { ...row };
+    if (!enriched.manufacturer && best.maker) enriched.manufacturer = best.maker;
+    if (!enriched.car_model && best.model) enriched.car_model = best.model;
+    if (!enriched.detail_model && best.sub) enriched.detail_model = best.sub;
+    if (!enriched.fuel_type && best.fuel_type) enriched.fuel_type = best.fuel_type;
+    if (!enriched.category && best.category) enriched.category = best.category;
+    if (!enriched.origin && best.origin) enriched.origin = best.origin;
+    if (!enriched.powertrain && best.powertrain) enriched.powertrain = best.powertrain;
+    if (!enriched.displacement && best.displacement) enriched.displacement = best.displacement;
+    if (!enriched.seats && best.seats) enriched.seats = best.seats;
+    if (!enriched.battery_kwh && best.battery_kwh) enriched.battery_kwh = best.battery_kwh;
+    enriched._master_matched = `${best.maker} ${best.model} ${best.sub}`;
+    return enriched;
+  });
+}
+
 // ───────── 컴포넌트 ─────────
 export function UploadClient() {
   const [typeKey, setTypeKey] = useState<string>('auto');
@@ -187,6 +243,12 @@ export function UploadClient() {
   const [fileName, setFileName] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const [saving, setSaving] = useState(false);
+  const vehicleMasters = useRtdbCollection<RtdbCarModel>('vehicle_master');
+  const [ocrBusy, setOcrBusy] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState('');
+  const [ocrRawText, setOcrRawText] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkBusy, setLinkBusy] = useState(false);
   const gridRef = useRef<JpkGridApi<Record<string, unknown>> | null>(null);
 
   const effectiveKey = typeKey === 'auto' ? detectedKey : typeKey;
@@ -194,8 +256,18 @@ export function UploadClient() {
 
   const mappedRows = useMemo(() => {
     if (!spec) return [];
-    return mapHeaders(rawRows, spec.schema);
-  }, [rawRows, spec]);
+    let rows = mapHeaders(rawRows, spec.schema);
+    // 자산 타입이면 정규화 (제조사/모델/세부모델/연료/차종 자동 매칭)
+    if (spec.key === 'asset' && vehicleMasters.data.length > 0) {
+      rows = rows.map((row) => {
+        const { data, corrections } = normalizeAsset(row as Record<string, unknown>, vehicleMasters.data);
+        // 보정 정보를 _corrections에 저장 (셀 스타일링용)
+        if (Object.keys(corrections).length > 0) data._corrections = corrections;
+        return data;
+      });
+    }
+    return rows;
+  }, [rawRows, spec, vehicleMasters.data]);
 
   const columnDefs = useMemo<ColDef[]>(() => {
     if (!spec) return [];
@@ -206,6 +278,21 @@ export function UploadClient() {
           headerName: f.label + (f.required ? ' *' : ''),
           field: f.col,
           width: 120,
+          cellStyle: (p) => {
+            const corr = (p.data as Record<string, unknown>)?._corrections as Record<string, string> | undefined;
+            if (corr && f.col in corr) {
+              return { color: 'var(--c-primary)', fontWeight: 600 };
+            }
+            return undefined;
+          },
+          tooltipValueGetter: (p) => {
+            const corr = (p.data as Record<string, unknown>)?._corrections as Record<string, string> | undefined;
+            if (corr && f.col in corr) {
+              const orig = corr[f.col];
+              return orig ? `원본: ${orig}` : '자동 채움';
+            }
+            return undefined;
+          },
         } as ColDef<Record<string, unknown>>),
       ),
     ];
@@ -213,21 +300,117 @@ export function UploadClient() {
 
   const handleFile = useCallback(async (file: File) => {
     setFileName(file.name);
-    const text = await file.text();
-    const rows = parseCsvObjects(text);
-    setRawRows(rows);
-    // 자동 감지 — 각 스키마별 label 매칭률 계산
-    if (rows.length > 0) {
-      const headers = Object.keys(rows[0]);
-      let best = { key: '', score: 0 };
-      for (const s of SCHEMAS) {
-        const score = s.schema.filter((f) => headers.includes(f.label) || headers.includes(f.col)).length;
-        if (score > best.score) best = { key: s.key, score };
+    setOcrRawText('');
+    const ext = (file.name.split('.').pop() ?? '').toLowerCase();
+    const isCsv = ext === 'csv' || ext === 'tsv' || ext === 'txt';
+
+    if (isCsv) {
+      // CSV 파싱
+      const text = await file.text();
+      const rows = parseCsvObjects(text);
+      setRawRows(rows);
+      if (rows.length > 0) {
+        const headers = Object.keys(rows[0]);
+        let best = { key: '', score: 0 };
+        for (const s of SCHEMAS) {
+          const score = s.schema.filter((f) => headers.includes(f.label) || headers.includes(f.col)).length;
+          if (score > best.score) best = { key: s.key, score };
+        }
+        if (best.score > 0) setDetectedKey(best.key);
+        toast.success(`${rows.length}행 파싱 · ${best.key ? `감지: ${SCHEMAS.find((s) => s.key === best.key)?.label}` : '유형 선택 필요'}`);
       }
-      if (best.score > 0) setDetectedKey(best.key);
-      toast.success(`${rows.length}행 파싱 · ${best.key ? `감지: ${SCHEMAS.find((s) => s.key === best.key)?.label}` : '유형 선택 필요'}`);
+    } else {
+      // PDF/이미지 → OCR (페이지별 분리)
+      setOcrBusy(true);
+      setOcrProgress('OCR 준비 중...');
+      try {
+        const result = await ocrFile(file, {
+          onProgress: (p) => setOcrProgress(p.message),
+        });
+        setOcrRawText(result.text);
+
+        // 페이지 구분자로 분리 — 각 페이지를 독립 행으로
+        const pages = result.text.split(/---\s*페이지 구분\s*---/).map((t) => t.trim()).filter(Boolean);
+        // 이미지(1페이지)면 pages가 1개
+        const allRows: Array<Record<string, string>> = [];
+
+        for (const pageText of pages) {
+          const carNumber = extractCarNumber(pageText);
+          const amount = extractAmount(pageText);
+          const date = extractDate(pageText);
+          const row: Record<string, string> = {};
+          if (carNumber) row['차량번호'] = carNumber;
+          if (amount) row['금액'] = String(amount);
+          if (date) row['일자'] = date;
+
+          // 줄 단위 키:값 파싱
+          const lines = pageText.split('\n').map((l) => l.trim()).filter(Boolean);
+          for (const line of lines) {
+            const kv = line.match(/^(.+?)\s*[:：]\s*(.+)$/);
+            if (kv && kv[1].length < 15 && !row[kv[1].trim()]) {
+              row[kv[1].trim()] = kv[2].trim();
+            }
+          }
+
+          if (Object.keys(row).length > 0) allRows.push(row);
+        }
+
+        if (allRows.length > 0) {
+          setRawRows(allRows);
+          toast.success(`OCR 완료 · ${allRows.length}건 추출 (${pages.length}페이지)`);
+        } else {
+          setRawRows([]);
+          toast.info('OCR 완료 · 자동 추출 항목 없음 (원문 텍스트 확인)');
+        }
+      } catch (err) {
+        toast.error(`OCR 실패: ${(err as Error).message}`);
+      } finally {
+        setOcrBusy(false);
+        setOcrProgress('');
+      }
     }
   }, []);
+
+  const handleLink = useCallback(async () => {
+    if (!linkUrl.trim()) return;
+    setLinkBusy(true);
+    try {
+      let url = linkUrl.trim();
+      // Google Sheets 공유 링크 → CSV export 변환
+      const sheetsMatch = url.match(/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+      if (sheetsMatch) {
+        const gidMatch = url.match(/gid=(\d+)/);
+        const gid = gidMatch ? gidMatch[1] : '0';
+        url = `https://docs.google.com/spreadsheets/d/${sheetsMatch[1]}/export?format=csv&gid=${gid}`;
+      }
+      // Google Drive 파일 링크 → direct download
+      const driveMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+      if (driveMatch) {
+        url = `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`;
+      }
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const text = await res.text();
+      const rows = parseCsvObjects(text);
+      setRawRows(rows);
+      setFileName(`링크 (${rows.length}행)`);
+      if (rows.length > 0) {
+        const headers = Object.keys(rows[0]);
+        let best = { key: '', score: 0 };
+        for (const s of SCHEMAS) {
+          const score = s.schema.filter((f) => headers.includes(f.label) || headers.includes(f.col)).length;
+          if (score > best.score) best = { key: s.key, score };
+        }
+        if (best.score > 0) setDetectedKey(best.key);
+        toast.success(`${rows.length}행 불러옴 · ${best.key ? `감지: ${SCHEMAS.find((s) => s.key === best.key)?.label}` : '유형 선택 필요'}`);
+      }
+    } catch (err) {
+      toast.error(`링크 불러오기 실패: ${(err as Error).message}`);
+    } finally {
+      setLinkBusy(false);
+    }
+  }, [linkUrl]);
 
   const copyHeaders = useCallback(() => {
     if (!spec) return;
@@ -294,7 +477,7 @@ export function UploadClient() {
         <div className="panel-head">
           <div>
             <i className="ph ph-upload-simple" />
-            <span className="panel-title">업로드</span>
+            <span className="panel-title">불러오기</span>
           </div>
           <div className="panel-head-actions">
             <button type="button" className="btn btn-sm btn-outline" onClick={reset}>
@@ -337,16 +520,7 @@ export function UploadClient() {
                 ② 스키마 항목 <span className="text-text-muted">({spec.schema.length}개)</span>
               </label>
               <div
-                style={{
-                  background: 'var(--c-bg-sub)',
-                  border: '1px solid var(--c-border)',
-                  borderRadius: 2,
-                  padding: 10,
-                  maxHeight: 140,
-                  overflowY: 'auto',
-                  fontSize: 11,
-                  lineHeight: 1.7,
-                }}
+                className="text-xs" style={{ background: 'var(--c-bg-sub)', border: '1px solid var(--c-border)', borderRadius: 2, padding: 10, maxHeight: 140, overflowY: 'auto', lineHeight: 1.7 }}
               >
                 {spec.schema.map((f) => (
                   <span key={f.col} style={{ marginRight: 8 }}>
@@ -367,9 +541,38 @@ export function UploadClient() {
             </div>
           )}
 
-          {/* ③ 업로드 */}
+          {/* ③ 링크 불러오기 */}
           <div>
-            <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>③ 파일 업로드</label>
+            <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>③ 링크 불러오기</label>
+            <div className="form-row">
+              <div style={{ flex: 1 }}>
+                <input
+                  type="url"
+                  className="input text-xs"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  placeholder="Google Sheets · Drive · CSV 링크"
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleLink(); } }}
+                />
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline"
+                onClick={handleLink}
+                disabled={linkBusy || !linkUrl.trim()}
+                style={{ flexShrink: 0 }}
+              >
+                {linkBusy ? <><i className="ph ph-spinner spin" /> 불러오는 중</> : <><i className="ph ph-link" /> 불러오기</>}
+              </button>
+            </div>
+            <div className="text-2xs text-text-muted" style={{ marginTop: 4 }}>
+              Google Sheets 공유 링크 · Google Drive 파일 링크 · CSV URL
+            </div>
+          </div>
+
+          {/* ④ 파일 불러오기 */}
+          <div>
+            <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>④ 파일 불러오기</label>
             <label
               className="jpk-uploader-drop"
               onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -386,36 +589,50 @@ export function UploadClient() {
             >
               <input
                 type="file"
-                accept=".csv,.xlsx,.xls"
+                accept="*/*"
                 hidden
                 onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); e.target.value = ''; }}
               />
-              <i className="ph ph-upload-simple" style={{ fontSize: 18 }} />
+              <i className="ph ph-upload-simple text-[18px]" />
               <div>
-                <div style={{ fontSize: 12, fontWeight: 600 }}>
-                  {fileName || 'CSV 파일 업로드'}
+                <div className="text-base" style={{ fontWeight: 600 }}>
+                  {fileName || '파일 불러오기'}
                 </div>
-                <div className="text-text-muted" style={{ fontSize: 10 }}>
-                  클릭 또는 드래그 · 첫 행은 헤더
+                <div className="text-text-muted text-2xs">
+                  CSV · PDF · 이미지 · 클릭 또는 드래그
                 </div>
               </div>
             </label>
           </div>
 
-          {/* ④ 감지 결과 */}
-          {rawRows.length > 0 && (
+          {/* OCR 진행 */}
+          {ocrBusy && (
             <div
-              style={{
-                padding: 10,
-                background: 'var(--c-success-bg)',
-                border: '1px solid var(--c-success)',
-                borderRadius: 2,
-                fontSize: 11,
-                color: 'var(--c-success)',
-              }}
+              className="text-xs text-primary" style={{ padding: 10, background: 'var(--c-primary-bg)', border: '1px solid var(--c-primary)', borderRadius: 2, display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <i className="ph ph-spinner spin" /> {ocrProgress}
+            </div>
+          )}
+
+          {/* ④ 감지 결과 */}
+          {rawRows.length > 0 && !ocrBusy && (
+            <div
+              className="text-xs text-success" style={{ padding: 10, background: 'var(--c-success-bg)', border: '1px solid var(--c-success)', borderRadius: 2 }}
             >
               ✓ <b>{rawRows.length}</b>행 파싱 완료 {spec && ` · ${spec.label}로 매핑`}
             </div>
+          )}
+
+          {/* OCR 원문 */}
+          {ocrRawText && !ocrBusy && (
+            <details style={{ marginTop: 4 }}>
+              <summary className="text-xs text-text-muted" style={{ cursor: 'pointer', padding: '4px 0' }}>
+                OCR 원문 보기
+              </summary>
+              <pre className="text-2xs" style={{ background: 'var(--c-bg-sub)', padding: 8, borderRadius: 2, maxHeight: 160, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all', marginTop: 4 }}>
+                {ocrRawText}
+              </pre>
+            </details>
           )}
         </div>
       </section>
@@ -427,7 +644,7 @@ export function UploadClient() {
             <i className="ph ph-eye" />
             <span className="panel-title">데이터 미리보기</span>
             <span className="panel-subtitle">
-              {fileName || '파일을 업로드하세요'}
+              {fileName || '파일을 불러오세요'}
               {mappedRows.length > 0 && ` · ${mappedRows.length}건`}
             </span>
           </div>
@@ -449,7 +666,7 @@ export function UploadClient() {
               style={{ padding: 40, height: '100%' }}
             >
               <i className="ph ph-table" style={{ fontSize: 32 }} />
-              <div style={{ fontSize: 12 }}>좌측에서 파일을 업로드하면 여기에 미리보기가 표시됩니다</div>
+              <div className="text-base">좌측에서 파일을 불러오면 여기에 미리보기가 표시됩니다</div>
             </div>
           ) : (
             <JpkGrid
@@ -457,6 +674,7 @@ export function UploadClient() {
               columnDefs={columnDefs}
               rowData={mappedRows}
               storageKey={`jpk.grid.upload.${spec?.key ?? 'unknown'}`}
+              options={{ tooltipShowDelay: 300 }}
             />
           )}
         </div>

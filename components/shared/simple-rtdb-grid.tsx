@@ -69,7 +69,7 @@ export function SimpleRtdbGrid<T extends Record<string, unknown>>({
     if (data.length === 0) {
       return (
         <div className="flex items-center justify-center gap-2 text-text-muted" style={{ height: '100%', minHeight: 200 }}>
-          <i className="ph ph-inbox" style={{ fontSize: 24 }} />
+          <i className="ph ph-inbox text-[24px]" />
           <span>{emptyMessage}</span>
         </div>
       );

@@ -28,7 +28,7 @@ export function FuelForm() {
         <i className="ph ph-gas-pump" />주유 · 충전
       </div>
       <div className="form-grid">
-        <Field label="연료 구분" required span={3}>
+        <Field label="연료 구분" required span={2}>
           <BtnGroup value={fuelType} onChange={setFuelType} options={FUEL_TYPES} />
         </Field>
         <Field label="주유소 / 충전소">
@@ -46,7 +46,7 @@ export function FuelForm() {
         <Field label="결제 금액" required>
           <NumberInput name="amount" required placeholder="0" />
         </Field>
-        <Field label="메모" span={3}>
+        <Field label="메모" span={2}>
           <TextArea name="memo" rows={2} />
         </Field>
       </div>

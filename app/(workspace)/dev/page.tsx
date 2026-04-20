@@ -63,8 +63,7 @@ export default function DevPage() {
         <div className="panel-head">
           <div>
             <i
-              className={`ph ${DEV_ICONS[selected]}`}
-              style={{ color: 'var(--c-text-sub)', fontSize: 18 }}
+              className={`ph ${DEV_ICONS[selected]} text-text-sub text-[18px]`}
             />
             <span className="panel-title">{DEV_LABELS[selected]}</span>
             <span className="panel-subtitle">{DEV_SUBS[selected]}</span>
@@ -99,7 +98,7 @@ export default function DevPage() {
           />
           {/* takeover 안 되면 기본 DevHelp */}
           {!takeover && (
-            <div style={{ padding: 16, fontSize: 12, lineHeight: 1.6, color: 'var(--c-text-sub)', overflow: 'auto', height: '100%' }}>
+            <div className="text-base text-text-sub" style={{ padding: 16, lineHeight: 1.6, overflow: 'auto', height: '100%' }}>
               <DevHelp k={selected} />
             </div>
           )}

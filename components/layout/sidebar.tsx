@@ -62,7 +62,7 @@ export function Sidebar() {
       <div className="sidebar-top">
         <Link
           href="/"
-          style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', color: 'var(--c-text)', width: '100%', height: '100%' }}
+          className="text-text" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none', width: '100%', height: '100%' }}
           aria-label="홈"
         />
       </div>

@@ -185,9 +185,9 @@ function AuthView({
     <div className="my-auth">
       <div className="my-auth-card">
         <div className="my-auth-brand">
-          <i className="ph-fill ph-car" style={{ fontSize: 32, color: 'var(--c-primary)' }} />
-          <div style={{ fontSize: 18, fontWeight: 700, marginTop: 6 }}>JPK 렌터카</div>
-          <div style={{ fontSize: 12, color: 'var(--c-text-muted)', marginTop: 2 }}>
+          <i className="ph-fill ph-car text-primary" style={{ fontSize: 32 }} />
+          <div className="text-[18px]" style={{ fontWeight: 700, marginTop: 6 }}>JPK 렌터카</div>
+          <div className="text-base text-text-muted" style={{ marginTop: 2 }}>
             내 계약 · 납부 · 문서 조회
           </div>
         </div>
@@ -204,7 +204,7 @@ function AuthView({
           />
           <label className="my-auth-label" style={{ marginTop: 12 }}>
             등록번호
-            <span style={{ fontSize: 10, color: 'var(--c-text-muted)', fontWeight: 400, marginLeft: 6 }}>
+            <span className="text-2xs text-text-muted" style={{ fontWeight: 400, marginLeft: 6 }}>
               · 전화/주민/법인/사업자 중 하나
             </span>
           </label>
@@ -238,8 +238,8 @@ function Dashboard({ data, onLogout }: { data: Payload; onLogout: () => void }) 
     <div className="my-dash">
       <header className="my-dash-head">
         <div>
-          <div style={{ fontSize: 11, color: 'var(--c-text-muted)' }}>JPK 렌터카</div>
-          <div style={{ fontSize: 14, fontWeight: 700 }}>{contract.contractor_name ?? '—'}님</div>
+          <div className="text-xs text-text-muted">JPK 렌터카</div>
+          <div className="text-[14px]" style={{ fontWeight: 700 }}>{contract.contractor_name ?? '—'}님</div>
         </div>
         <button onClick={onLogout} className="my-dash-logout">
           <i className="ph ph-sign-out" />종료
@@ -348,7 +348,7 @@ function NextPaymentCard({ contract, billings }: { contract: Contract; billings:
           <i className="ph-fill ph-warning-circle" />
           <div>
             <b>미납 {overdueList.length}건 · {fmtMoney(overdueTotal)}</b>
-            <div style={{ fontSize: 11, marginTop: 2 }}>결제 확인 후 담당자에게 알려주세요</div>
+            <div className="text-xs" style={{ marginTop: 2 }}>결제 확인 후 담당자에게 알려주세요</div>
           </div>
         </div>
       )}
@@ -502,7 +502,7 @@ function DocumentsCard({ docs }: { docs: Docs }) {
           {docs.other_ocr_docs.map((d, i) => (
             <div key={i} className="my-doc-row">
               <b>{d.doc_type}</b>
-              <span style={{ color: 'var(--c-text-muted)' }}>{d.doc_name || '—'}</span>
+              <span className="text-text-muted">{d.doc_name || '—'}</span>
             </div>
           ))}
         </DocItem>
@@ -541,14 +541,14 @@ function ContactsCard() {
           <i className="ph-fill ph-warning" />
           <div>
             <div style={{ fontWeight: 700 }}>사고·정비 24시간</div>
-            <div style={{ fontSize: 11 }}>1588-0000</div>
+            <div className="text-xs">1588-0000</div>
           </div>
         </a>
         <a href="tel:02-0000-0000" className="my-contact">
           <i className="ph ph-headset" />
           <div>
             <div style={{ fontWeight: 700 }}>고객센터</div>
-            <div style={{ fontSize: 11 }}>평일 09-18시</div>
+            <div className="text-xs">평일 09-18시</div>
           </div>
         </a>
       </div>

@@ -31,15 +31,9 @@ function Stat({ label, value, color }: { label: string; value: number; color: st
         flex: 1,
       }}
     >
-      <div style={{ fontSize: 10, color: 'var(--c-text-muted)' }}>{label}</div>
+      <div className="text-2xs text-text-muted">{label}</div>
       <div
-        style={{
-          fontSize: 18,
-          fontWeight: 700,
-          color,
-          fontVariantNumeric: 'tabular-nums',
-          marginTop: 2,
-        }}
+        className="text-[18px]" style={{ fontWeight: 700, color, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}
       >
         {fmt(Number(value || 0))}
       </div>
@@ -79,8 +73,8 @@ export function InputHistoryDetail({ upload }: Props) {
         className="flex flex-col items-center justify-center text-text-muted"
         style={{ height: '100%', minHeight: 200, gap: 8 }}
       >
-        <i className="ph ph-arrow-left" style={{ fontSize: 24, opacity: 0.4 }} />
-        <span style={{ fontSize: 12 }}>좌측 이력을 선택하세요</span>
+        <i className="ph ph-arrow-left text-[24px]" style={{ opacity: 0.4 }} />
+        <span className="text-base">좌측 이력을 선택하세요</span>
       </div>
     );
   }
@@ -97,17 +91,10 @@ export function InputHistoryDetail({ upload }: Props) {
           <Stat label="오류" value={upload.fail} color="var(--c-danger)" />
         </div>
         <div
-          style={{
-            fontSize: 11,
-            color: 'var(--c-text-muted)',
-            display: 'flex',
-            gap: 12,
-            flexWrap: 'wrap',
-            alignItems: 'center',
-          }}
+          className="text-xs text-text-muted" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}
         >
           <span>
-            <b style={{ color: 'var(--c-text-sub)', fontWeight: 600 }}>
+            <b className="text-text-sub" style={{ fontWeight: 600 }}>
               {upload._direct ? '개별입력' : '업로드'}
             </b>
             {': '}
@@ -127,20 +114,20 @@ export function InputHistoryDetail({ upload }: Props) {
             </b>
           </span>
           <span>
-            종류: <b style={{ color: 'var(--c-text-sub)' }}>{upload.type_label}</b>
+            종류: <b className="text-text-sub">{upload.type_label}</b>
           </span>
           {isUrl && (
             <a
               href={upload.filename}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: 'var(--c-primary)', textDecoration: 'underline', marginLeft: 'auto' }}
+              className="text-primary" style={{ textDecoration: 'underline', marginLeft: 'auto' }}
             >
               🔗 원본 열기
             </a>
           )}
         </div>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--c-text)', marginTop: 6 }}>
+        <div className="text-base text-text" style={{ fontWeight: 600, marginTop: 6 }}>
           {isUrl ? '(URL)' : upload.filename}
         </div>
       </div>
@@ -150,8 +137,8 @@ export function InputHistoryDetail({ upload }: Props) {
             className="flex flex-col items-center justify-center text-text-muted"
             style={{ height: '100%', minHeight: 200, gap: 8 }}
           >
-            <i className="ph ph-database" style={{ fontSize: 24, opacity: 0.4 }} />
-            <span style={{ fontSize: 12 }}>저장된 원본 행 데이터가 없습니다</span>
+            <i className="ph ph-database text-[24px]" style={{ opacity: 0.4 }} />
+            <span className="text-base">저장된 원본 행 데이터가 없습니다</span>
           </div>
         ) : (
           <JpkGrid<Record<string, unknown>>

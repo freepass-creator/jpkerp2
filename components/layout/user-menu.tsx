@@ -50,7 +50,7 @@ export function UserMenu() {
             <div className="text-xs text-text-muted truncate">{user.email}</div>
             <div className="mt-1.5 flex items-center gap-1.5 text-[10px]">
               <span className="badge badge-primary">
-                <i className="ph ph-shield-check" style={{ fontSize: 10 }} />
+                <i className="ph ph-shield-check text-2xs" />
                 {ROLE_LABEL[user.role] ?? user.role}
               </span>
               {user.assignedPartners.length > 0 && (
@@ -61,7 +61,7 @@ export function UserMenu() {
             </div>
           </div>
           <Link
-            href="/my"
+            href="/mypage"
             className="w-full h-8 px-3 text-sm text-left hover:bg-bg-hover flex items-center gap-2"
             onClick={() => setOpen(false)}
             style={{ textDecoration: 'none', color: 'inherit' }}

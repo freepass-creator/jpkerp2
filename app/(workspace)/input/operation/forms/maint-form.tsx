@@ -42,7 +42,7 @@ export function MaintForm() {
         <Field label="제목">
           <TextInput name="title" placeholder="간단 제목 (생략 가능)" />
         </Field>
-        <Field label="상세 메모" span={3}>
+        <Field label="상세 메모" span={2}>
           <TextArea name="memo" placeholder="교체 부품·증상·결과 등" rows={3} />
         </Field>
       </div>

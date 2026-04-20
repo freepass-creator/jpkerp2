@@ -120,7 +120,7 @@ export function EntityPicker<T extends PickerRecord>({
     return (
       <>
         {s.slice(0, idx)}
-        <mark style={{ background: 'var(--c-primary-bg)', color: 'var(--c-primary)', padding: 0 }}>
+        <mark className="text-primary" style={{ background: 'var(--c-primary-bg)', padding: 0 }}>
           {s.slice(idx, idx + q.length)}
         </mark>
         {s.slice(idx + q.length)}
@@ -171,27 +171,18 @@ export function EntityPicker<T extends PickerRecord>({
               onMouseDown={(e) => e.preventDefault()}
               onMouseEnter={() => setHoverIdx(i)}
               onClick={() => select(r)}
-              style={{
-                padding: '6px 10px',
-                display: 'grid',
-                gridTemplateColumns: secondaryField && tertiaryField ? '1fr 1fr 1fr' : secondaryField ? '1fr 1fr' : '1fr',
-                gap: 8,
-                cursor: 'pointer',
-                background: i === hoverIdx ? 'var(--c-bg-hover)' : 'transparent',
-                fontSize: 12,
-                borderBottom: '1px solid var(--c-border)',
-              }}
+              className="text-base" style={{ padding: '6px 10px', display: 'grid', gridTemplateColumns: secondaryField && tertiaryField ? '1fr 1fr 1fr' : secondaryField ? '1fr 1fr' : '1fr', gap: 8, cursor: 'pointer', background: i === hoverIdx ? 'var(--c-bg-hover)' : 'transparent', borderBottom: '1px solid var(--c-border)' }}
             >
-              <span style={{ fontWeight: 600, color: 'var(--c-text)' }}>
+              <span className="text-text" style={{ fontWeight: 600 }}>
                 {renderMarked(String(r[primaryField] ?? ''))}
               </span>
               {secondaryField && (
-                <span style={{ color: 'var(--c-text-sub)' }}>
+                <span className="text-text-sub">
                   {renderMarked(String(r[secondaryField] ?? '—'))}
                 </span>
               )}
               {tertiaryField && (
-                <span style={{ color: 'var(--c-text-muted)', textAlign: 'right' }}>
+                <span className="text-text-muted" style={{ textAlign: 'right' }}>
                   {String(r[tertiaryField] ?? '')}
                 </span>
               )}
@@ -201,27 +192,14 @@ export function EntityPicker<T extends PickerRecord>({
       )}
       {showEmpty && createHref && (
         <div
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 2px)',
-            left: 0,
-            right: 0,
-            zIndex: 20,
-            background: 'var(--c-surface)',
-            border: '1px solid var(--c-border)',
-            borderRadius: 2,
-            padding: '8px 10px',
-            fontSize: 12,
-            color: 'var(--c-text-muted)',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-          }}
+          className="text-base text-text-muted" style={{ position: 'absolute', top: 'calc(100% + 2px)', left: 0, right: 0, zIndex: 20, background: 'var(--c-surface)', border: '1px solid var(--c-border)', borderRadius: 2, padding: '8px 10px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
           onMouseDown={(e) => e.preventDefault()}
         >
           매칭 없음 —{' '}
           <Link
             href={createHref}
             target="_blank"
-            style={{ color: 'var(--c-primary)', fontWeight: 600 }}
+            className="text-primary" style={{ fontWeight: 600 }}
           >
             <i className="ph ph-plus" style={{ marginRight: 4 }} />
             {createLabel}

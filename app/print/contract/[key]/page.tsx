@@ -87,13 +87,7 @@ export default function ContractPrintPage() {
 
       <div className="print-section-title">특약사항</div>
       <div
-        style={{
-          border: '1px solid var(--c-border)',
-          padding: '12px 14px',
-          minHeight: 80,
-          fontSize: 12,
-          whiteSpace: 'pre-wrap',
-        }}
+        className="text-base" style={{ border: '1px solid var(--c-border)', padding: '12px 14px', minHeight: 80, whiteSpace: 'pre-wrap' }}
       >
         {contract.note ?? ''}
       </div>
@@ -108,7 +102,7 @@ export default function ContractPrintPage() {
         </div>
       </div>
 
-      <div style={{ marginTop: 24, textAlign: 'center', fontSize: 11, color: '#888' }}>
+      <div className="text-xs" style={{ marginTop: 24, textAlign: 'center', color: '#888' }}>
         본 계약서는 자동차 대여 계약의 증빙으로서 양 당사자가 서명·날인하여 2부 작성 후 각 1부씩 보관합니다.
       </div>
     </div>

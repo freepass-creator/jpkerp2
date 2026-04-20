@@ -103,7 +103,7 @@ export function ContractExtensionForm() {
       <div className="form-section">
         <div className="form-section-title">
           <i className="ph ph-arrow-clockwise" />원본 계약 선택
-          <span className="text-text-muted" style={{ fontSize: 10, fontWeight: 400, marginLeft: 8 }}>
+          <span className="text-text-muted text-2xs" style={{ fontWeight: 400, marginLeft: 8 }}>
             · 진행 중인 계약만 선택 가능
           </span>
         </div>
@@ -127,30 +127,22 @@ export function ContractExtensionForm() {
 
         {baseContract && (
           <div
-            style={{
-              marginTop: 10,
-              padding: 10,
-              borderRadius: 2,
-              background: 'var(--c-bg-sub)',
-              border: '1px solid var(--c-border)',
-              fontSize: 12,
-              lineHeight: 1.6,
-            }}
+            className="text-base" style={{ marginTop: 10, padding: 10, borderRadius: 2, background: 'var(--c-bg-sub)', border: '1px solid var(--c-border)', lineHeight: 1.6 }}
           >
             <div>
               <b>{baseContract.contractor_name ?? '—'}</b>
-              <span style={{ color: 'var(--c-text-muted)', marginLeft: 6 }}>
+              <span className="text-text-muted" style={{ marginLeft: 6 }}>
                 · {baseContract.car_number ?? '—'} · {baseContract.product_type ?? '—'}
               </span>
             </div>
-            <div style={{ color: 'var(--c-text-sub)', marginTop: 2 }}>
+            <div className="text-text-sub" style={{ marginTop: 2 }}>
               기존 기간: {shortDate(baseContract.start_date)} ~ {shortDate(baseContract.end_date)}
               {baseContract.rent_months ? ` · ${baseContract.rent_months}개월` : ''}
               {baseContract.rent_amount ? ` · 월 ${baseContract.rent_amount.toLocaleString()}원` : ''}
               {baseContract.auto_debit_day ? ` · 매월 ${baseContract.auto_debit_day}일` : ''}
             </div>
             {suggestStart && (
-              <div style={{ color: 'var(--c-primary)', marginTop: 4, fontSize: 11 }}>
+              <div className="text-primary text-xs" style={{ marginTop: 4 }}>
                 연장 시작 제안: {suggestStart} (기존 종료일 +1)
               </div>
             )}

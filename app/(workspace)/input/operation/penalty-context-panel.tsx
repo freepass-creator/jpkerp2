@@ -1,10 +1,14 @@
 'use client';
 
+import { useMemo } from 'react';
 import { toast } from 'sonner';
 import { saveEvent } from '@/lib/firebase/events';
 import { useAuth } from '@/lib/auth/context';
 import { useSaveStore } from '@/lib/hooks/useSaveStatus';
 import { usePenaltyStore, type PenaltyWorkItem } from './penalty-notice-store';
+import { JpkGrid } from '@/components/shared/jpk-grid';
+import { typedColumn } from '@/lib/grid/typed-column';
+import type { ColDef } from 'ag-grid-community';
 
 const PRINT_KEY = 'jpk.print.penalty';
 
@@ -18,8 +22,8 @@ function openPrintWindow(items: PenaltyWorkItem[]) {
   window.open('/print/penalty?auto=1', '_blank', 'width=900,height=1000');
 }
 
-export function PenaltyContextPanel() {
-  const { items, remove, update, clear } = usePenaltyStore();
+export function usePenaltyComplete() {
+  const { items, remove, update } = usePenaltyStore();
   const { user } = useAuth();
 
   const completeItem = async (item: PenaltyWorkItem) => {
@@ -71,19 +75,60 @@ export function PenaltyContextPanel() {
     for (const item of [...items]) await completeItem(item);
   };
 
-  const clearAll = () => {
-    if (!items.length) return;
-    if (!confirm(`대기 ${items.length}건을 모두 비우시겠습니까?`)) return;
-    clear();
-  };
+  return { completeItem, completeAll };
+}
 
-  const printOne = (item: PenaltyWorkItem) => openPrintWindow([item]);
-  const printAll = () => {
-    if (!items.length) return;
-    openPrintWindow(items);
-  };
+export function PenaltyContextPanel() {
+  const { items, remove } = usePenaltyStore();
+  const { completeItem } = usePenaltyComplete();
 
-  const totalAmount = items.reduce((s, i) => s + (i.amount || 0), 0);
+  const cols = useMemo<ColDef<PenaltyWorkItem>[]>(() => [
+    // ── pinned left ──
+    typedColumn('number', { headerName: 'p', field: 'pageNumber' as keyof PenaltyWorkItem, width: 36, pinned: 'left' }),
+    typedColumn('action', {
+      headerName: 'PDF',
+      width: 44,
+      pinned: 'left',
+      cellRenderer: (p: { data: PenaltyWorkItem }) => {
+        const it = p.data;
+        if (!it) return null;
+        return (
+          <button type="button" onClick={() => openPrintWindow([it])} title="PDF 다운로드" style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, color: 'var(--c-text-sub)' }}>
+            <i className="ph ph-file-pdf" style={{ fontSize: 14 }} />
+          </button>
+        );
+      },
+    }),
+    // ── scrollable ──
+    typedColumn('text', {
+      headerName: '회사',
+      width: 70,
+      valueGetter: (p) => p.data?._asset?.partner_code ?? p.data?._contract?.partner_code ?? '—',
+    }),
+    typedColumn('text', { headerName: '차량번호', field: 'car_number', width: 90, pinned: 'left', cellStyle: { fontWeight: 600 } }),
+    typedColumn('text', {
+      headerName: '계약자',
+      width: 80,
+      valueGetter: (p) => p.data?._contractor || '—',
+      cellStyle: (p) => ({ color: p.data?._contract ? 'var(--c-text)' : 'var(--c-danger)' }),
+    }),
+    typedColumn('select', { headerName: '유형', field: 'doc_type', width: 70 }),
+    typedColumn('text', { headerName: '부과기관', field: 'issuer', width: 90 }),
+    typedColumn('text', { headerName: '위반일시', field: 'date', width: 120 }),
+    typedColumn('text', { headerName: '위반장소', field: 'location', flex: 1, minWidth: 120 }),
+    typedColumn('text', { headerName: '위반내용', field: 'description', width: 140 }),
+    typedColumn('number', {
+      headerName: '금액',
+      field: 'amount',
+      width: 80,
+      valueFormatter: (p) => p.value ? Number(p.value).toLocaleString() : '—',
+      cellStyle: { fontWeight: 600 },
+    }),
+    typedColumn('number', { headerName: '벌점', field: 'demerit_points', width: 50 }),
+    typedColumn('text', { headerName: '납부기한', field: 'due_date', width: 90 }),
+    typedColumn('text', { headerName: '고지서번호', field: 'notice_no', width: 140 }),
+    typedColumn('text', { headerName: '납부계좌', field: 'pay_account', width: 140 }),
+  ], [completeItem, remove]);
 
   if (!items.length) {
     return (
@@ -100,136 +145,11 @@ export function PenaltyContextPanel() {
   }
 
   return (
-    <div className="flex flex-col" style={{ height: '100%' }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '10px 14px',
-          borderBottom: '1px solid var(--c-border)',
-          flexShrink: 0,
-        }}
-      >
-        <span style={{ fontSize: 12, fontWeight: 600 }}>{items.length}건</span>
-        <span className="text-text-muted" style={{ fontSize: 11 }}>
-          합계 {totalAmount.toLocaleString()}원
-        </span>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-          <button
-            type="button"
-            className="btn btn-sm btn-outline"
-            onClick={printAll}
-            title="모든 고지서 인쇄 / PDF 저장"
-          >
-            <i className="ph ph-printer" />
-            전체 인쇄
-          </button>
-          <button type="button" className="btn btn-sm btn-outline" onClick={clearAll}>
-            <i className="ph ph-trash" />초기화
-          </button>
-          <button type="button" className="btn btn-sm btn-primary" onClick={completeAll}>
-            <i className="ph ph-check-circle" />전체 처리완료
-          </button>
-        </div>
-      </div>
-
-      <div className="overflow-auto scrollbar-thin" style={{ flex: 1 }}>
-        <table className="jpk-item-table" style={{ width: '100%' }}>
-          <thead>
-            <tr>
-              <th style={{ width: 32, textAlign: 'center' }}>매칭</th>
-              <th style={{ width: 86 }}>차량번호</th>
-              <th style={{ width: 90 }}>부과기관</th>
-              <th style={{ width: 110 }}>위반일시</th>
-              <th>위반장소</th>
-              <th style={{ width: 70, textAlign: 'right' }}>금액</th>
-              <th style={{ width: 70 }}>계약자</th>
-              <th style={{ width: 86 }} />
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((it) => {
-              const matched = !!it._contract;
-              return (
-                <tr key={it.id}>
-                  <td
-                    style={{
-                      textAlign: 'center',
-                      color: matched ? 'var(--c-success)' : 'var(--c-danger)',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {matched ? '✓' : '✗'}
-                  </td>
-                  <td style={{ fontWeight: 600 }}>{it.car_number || '—'}</td>
-                  <td
-                    style={{
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      maxWidth: 90,
-                    }}
-                  >
-                    {it.issuer || '—'}
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{it.date || '—'}</td>
-                  <td
-                    style={{
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      maxWidth: 180,
-                    }}
-                    title={it.location}
-                  >
-                    {it.location || '—'}
-                  </td>
-                  <td
-                    style={{
-                      textAlign: 'right',
-                      fontVariantNumeric: 'tabular-nums',
-                    }}
-                  >
-                    {it.amount ? it.amount.toLocaleString() : '—'}
-                  </td>
-                  <td style={{ color: matched ? 'var(--c-text)' : 'var(--c-danger)' }}>
-                    {it._contractor || '—'}
-                  </td>
-                  <td style={{ display: 'flex', gap: 2, padding: '4px' }}>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-ghost"
-                      onClick={() => printOne(it)}
-                      style={{ padding: '0 6px', fontSize: 10 }}
-                      title="개별 인쇄 / PDF 저장"
-                    >
-                      <i className="ph ph-printer" />
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-primary"
-                      disabled={it._saving}
-                      onClick={() => completeItem(it)}
-                      style={{ padding: '0 6px', fontSize: 10 }}
-                    >
-                      {it._saving ? '저장중' : '완료'}
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="삭제"
-                      className="jpk-item-del"
-                      onClick={() => remove(it.id)}
-                    >
-                      <i className="ph ph-x" />
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <JpkGrid<PenaltyWorkItem>
+      columnDefs={cols}
+      rowData={items}
+      getRowId={(d) => d.id}
+      storageKey="jpk.grid.penalty-context"
+    />
   );
 }

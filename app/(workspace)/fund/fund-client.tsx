@@ -133,7 +133,7 @@ export function FundClient() {
             {label}
           </button>
         ))}
-        <span className="ml-auto text-text-muted" style={{ fontSize: 11 }}>{GUIDES[tab]}</span>
+        <span className="ml-auto text-text-muted text-xs">{GUIDES[tab]}</span>
       </div>
 
       {/* 업로드 + 계좌번호 입력 */}
@@ -163,8 +163,8 @@ export function FundClient() {
             hidden
             onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
           />
-          <i className="ph ph-file-arrow-up" style={{ fontSize: 18 }} />
-          <span style={{ fontSize: 12, fontWeight: 500 }}>CSV 파일 드래그 또는 클릭</span>
+          <i className="ph ph-file-arrow-up text-[18px]" />
+          <span className="text-base" style={{ fontWeight: 500 }}>CSV 파일 드래그 또는 클릭</span>
         </label>
         {tab !== 'card' && (
           <div className="field" style={{ width: 220 }}>
@@ -182,12 +182,12 @@ export function FundClient() {
 
       {/* 요약 + 확정 버튼 */}
       {summary && (
-        <div className="flex items-center gap-3 px-4 py-2 border-b border-border" style={{ fontSize: 11 }}>
+        <div className="flex items-center gap-3 px-4 py-2 border-b border-border text-xs">
           <span><b>{rows.length}건</b> 인식</span>
           <span className="text-text-muted">·</span>
-          <span style={{ color: 'var(--c-success)' }}>입금 {summary.inCount}건 {fmt(summary.inSum)}원</span>
+          <span className="text-success">입금 {summary.inCount}건 {fmt(summary.inSum)}원</span>
           <span className="text-text-muted">·</span>
-          <span style={{ color: 'var(--c-danger)' }}>출금 {summary.outCount}건 {fmt(summary.outSum)}원</span>
+          <span className="text-danger">출금 {summary.outCount}건 {fmt(summary.outSum)}원</span>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
             <button type="button" className="btn btn-sm btn-outline" onClick={() => setRows([])} disabled={busy}>
               <i className="ph ph-trash" />초기화
@@ -211,7 +211,7 @@ export function FundClient() {
           />
         ) : (
           <div className="flex items-center justify-center gap-2 text-text-muted" style={{ height: '100%' }}>
-            <i className="ph ph-file-csv" style={{ fontSize: 24 }} />
+            <i className="ph ph-file-csv text-[24px]" />
             <span>CSV 파일을 업로드하면 여기에 미리보기가 표시됩니다</span>
           </div>
         )}

@@ -143,16 +143,16 @@ export function RtdbStatusTool() {
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <div>
-          <span className="text-text-muted" style={{ fontSize: 11 }}>전체</span>
-          <span style={{ fontSize: 18, fontWeight: 700, marginLeft: 6 }}>{fmt(total)}</span>
-          <span className="text-text-muted" style={{ fontSize: 11, marginLeft: 4 }}>건</span>
-          <span className="text-text-muted" style={{ fontSize: 11, marginLeft: 10 }}>활성 {fmt(totalActive)}</span>
-          <span className="text-text-muted" style={{ fontSize: 11, marginLeft: 10 }}>용량 ≈ {fmt(Math.round(totalSize / 1024))} KB</span>
+          <span className="text-text-muted text-xs">전체</span>
+          <span className="text-[18px]" style={{ fontWeight: 700, marginLeft: 6 }}>{fmt(total)}</span>
+          <span className="text-text-muted text-xs" style={{ marginLeft: 4 }}>건</span>
+          <span className="text-text-muted text-xs" style={{ marginLeft: 10 }}>활성 {fmt(totalActive)}</span>
+          <span className="text-text-muted text-xs" style={{ marginLeft: 10 }}>용량 ≈ {fmt(Math.round(totalSize / 1024))} KB</span>
         </div>
       </div>
 
       {!canDelete && (
-        <div style={{ padding: 8, background: 'var(--c-bg-sub)', fontSize: 11, color: 'var(--c-text-muted)', marginBottom: 12, borderRadius: 2 }}>
+        <div className="text-xs text-text-muted" style={{ padding: 8, background: 'var(--c-bg-sub)', marginBottom: 12, borderRadius: 2 }}>
           <i className="ph ph-info" style={{ marginRight: 4 }} />
           삭제는 admin 이상 권한 필요. 현재 역할: <b>{user?.role ?? '—'}</b>
         </div>
@@ -171,28 +171,27 @@ export function RtdbStatusTool() {
               return (
                 <div key={c.key} className="panel" style={{ padding: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                    <i className={`ph ${c.icon}`} style={{ fontSize: 20, color: 'var(--c-text-sub)' }} />
+                    <i className={`ph ${c.icon} text-[20px] text-text-sub`} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 11, color: 'var(--c-text-muted)' }}>
-                        {c.label} <span style={{ fontFamily: 'monospace', fontSize: 10 }}>/{c.key}</span>
+                      <div className="text-xs text-text-muted">
+                        {c.label} <span className="text-2xs" style={{ fontFamily: 'monospace' }}>/{c.key}</span>
                       </div>
-                      <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2 }}>
+                      <div className="text-[15px]" style={{ fontWeight: 700, marginTop: 2 }}>
                         {fmt(row?.active ?? 0)}
                         {(row?.deleted ?? 0) > 0 && (
-                          <span className="text-text-muted" style={{ fontSize: 10, fontWeight: 400, marginLeft: 4 }}>
+                          <span className="text-text-muted text-2xs" style={{ fontWeight: 400, marginLeft: 4 }}>
                             (+{fmt(row?.deleted ?? 0)} del)
                           </span>
                         )}
                       </div>
                     </div>
-                    <span style={{ fontSize: 10, color: 'var(--c-text-muted)' }}>
+                    <span className="text-2xs text-text-muted">
                       {fmt(Math.round((row?.size ?? 0) / 1024))}KB
                     </span>
                   </div>
                   <button
                     type="button"
-                    className="btn btn-sm btn-outline"
-                    style={{ width: '100%', color: 'var(--c-danger)', fontSize: 11 }}
+                    className="btn btn-sm btn-outline text-danger text-xs" style={{ width: '100%' }}
                     onClick={() => deleteAll(c.key, c.label, row?.active ?? 0)}
                     disabled={!canDelete || busy || (row?.active ?? 0) === 0}
                   >
@@ -206,8 +205,8 @@ export function RtdbStatusTool() {
 
           {/* upload_id 기준 삭제 */}
           <div className="panel" style={{ padding: 12 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>업로드 단위 삭제</div>
-            <div style={{ fontSize: 11, color: 'var(--c-text-muted)', marginBottom: 8 }}>
+            <div className="text-base" style={{ fontWeight: 600, marginBottom: 4 }}>업로드 단위 삭제</div>
+            <div className="text-xs text-text-muted" style={{ marginBottom: 8 }}>
               특정 <code style={{ fontFamily: 'monospace' }}>upload_id</code>로 생성된 레코드를 모든 컬렉션에서 일괄 soft-delete
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
@@ -216,13 +215,11 @@ export function RtdbStatusTool() {
                 value={uploadId}
                 onChange={(e) => setUploadId(e.target.value)}
                 placeholder="upload_id"
-                className="ctrl"
-                style={{ flex: 1, height: 30, fontSize: 12 }}
+                className="ctrl text-base" style={{ flex: 1, height: 30 }}
               />
               <button
                 type="button"
-                className="btn btn-sm btn-outline"
-                style={{ color: 'var(--c-danger)' }}
+                className="btn btn-sm btn-outline text-danger"
                 onClick={deleteByUpload}
                 disabled={!canDelete || deletingUpload || !uploadId.trim()}
               >

@@ -100,7 +100,7 @@ export function OcrCaptureForm() {
       <div className="form-section">
         <div className="form-section-title">
           <i className="ph ph-scan" />문서 업로드 · OCR
-          <span className="text-text-muted" style={{ fontSize: 10, fontWeight: 400, marginLeft: 8 }}>
+          <span className="text-text-muted text-2xs" style={{ fontWeight: 400, marginLeft: 8 }}>
             · 규격 없는 자유 형식. 추출된 내용만 저장.
           </span>
         </div>
@@ -124,7 +124,7 @@ export function OcrCaptureForm() {
                 type="file"
                 accept="image/*,.pdf"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                style={{ flex: 1, fontSize: 12 }}
+                className="text-base" style={{ flex: 1 }}
               />
               <button
                 type="button"
@@ -144,7 +144,7 @@ export function OcrCaptureForm() {
         <div className="form-section">
           <div className="form-section-title">
             <i className="ph ph-list-bullets" />추출 결과 ({pairs.length}쌍)
-            <span className="text-text-muted" style={{ fontSize: 10, fontWeight: 400, marginLeft: 8 }}>
+            <span className="text-text-muted text-2xs" style={{ fontWeight: 400, marginLeft: 8 }}>
               · 자동 파싱 결과. 자유롭게 편집·추가·삭제 가능
             </span>
             <button type="button" className="btn btn-sm btn-ghost" onClick={addPair} style={{ marginLeft: 'auto' }}>
@@ -156,33 +156,30 @@ export function OcrCaptureForm() {
               <div key={i} style={{ display: 'grid', gridTemplateColumns: '180px 1fr 32px', gap: 6 }}>
                 <input
                   type="text"
-                  className="ctrl"
+                  className="ctrl text-base"
                   value={p.key}
                   onChange={(e) => updatePair(i, 'key', e.target.value)}
                   placeholder="항목명"
-                  style={{ fontSize: 12 }}
                 />
                 <input
                   type="text"
-                  className="ctrl"
+                  className="ctrl text-base"
                   value={p.value}
                   onChange={(e) => updatePair(i, 'value', e.target.value)}
                   placeholder="값"
-                  style={{ fontSize: 12 }}
                 />
                 <button
                   type="button"
                   onClick={() => removePair(i)}
-                  className="btn btn-sm btn-ghost"
+                  className="btn btn-sm btn-ghost text-danger"
                   title="삭제"
-                  style={{ color: 'var(--c-danger)' }}
                 >
                   <i className="ph ph-x" />
                 </button>
               </div>
             ))}
             {pairs.length === 0 && (
-              <div className="text-text-muted" style={{ fontSize: 11, padding: 8 }}>
+              <div className="text-text-muted text-xs" style={{ padding: 8 }}>
                 자동 파싱된 항목 없음. "항목 추가"로 수기 입력 가능.
               </div>
             )}
@@ -199,7 +196,7 @@ export function OcrCaptureForm() {
             value={rawText}
             onChange={(e) => setRawText(e.target.value)}
             rows={6}
-            style={{ fontFamily: 'monospace', fontSize: 11 }}
+            className="text-xs" style={{ fontFamily: 'monospace' }}
           />
         </div>
       )}

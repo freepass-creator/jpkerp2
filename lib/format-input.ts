@@ -3,17 +3,9 @@
  * 모두 "입력 도중에도 허용"되는 진행형 파서 (partial-safe).
  */
 
-/** 차량번호: `\d{2,3}[가-힣]\d{0,4}` 진행형 허용 */
+/** 차량번호: 공백 제거 + 최대 8자 */
 export function sanitizeCarNumber(input: string): string {
-  const raw = (input ?? '').replace(/\s/g, '');
-  let out = '';
-  for (const ch of raw) {
-    const cand = out + ch;
-    if (/^\d{1,3}$/.test(cand)) { out = cand; continue; }
-    if (/^\d{2,3}[가-힣]$/.test(cand)) { out = cand; continue; }
-    if (/^\d{2,3}[가-힣]\d{1,4}$/.test(cand)) { out = cand; continue; }
-  }
-  return out;
+  return (input ?? '').replace(/\s/g, '').slice(0, 8);
 }
 
 /**

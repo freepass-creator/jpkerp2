@@ -31,13 +31,13 @@ export function ContactForm() {
         <i className="ph ph-phone" />고객 소통
       </div>
       <div className="form-grid">
-        <Field label="유형" required span={3}>
+        <Field label="유형" required span={2}>
           <BtnGroup value={contactType} onChange={setContactType} options={CONTACT_TYPES} />
         </Field>
-        <Field label="처리 결과" required span={3}>
+        <Field label="처리 결과" required span={2}>
           <BtnGroup value={result} onChange={setResult} options={RESULTS} />
         </Field>
-        <Field label="제목" span={3}>
+        <Field label="제목" span={2}>
           <TextInput
             name="title"
             placeholder="예: 미납 문의, 차량 사용문의"
@@ -47,7 +47,7 @@ export function ContactForm() {
             {titles.list.map((t) => <option key={t} value={t} />)}
           </datalist>
         </Field>
-        <Field label="처리 내용" span={3}>
+        <Field label="처리 내용" span={2}>
           <TextArea name="memo" placeholder="응대 내용 상세" rows={4} />
         </Field>
       </div>

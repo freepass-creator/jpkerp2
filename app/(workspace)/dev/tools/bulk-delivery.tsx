@@ -167,11 +167,11 @@ export function BulkDeliveryTool() {
         </button>
       </ToolActions>
 
-      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--c-border)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
-        <i className="ph ph-truck" style={{ color: 'var(--c-warn)' }} />
+      <div className="text-base" style={{ padding: '10px 14px', borderBottom: '1px solid var(--c-border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <i className="ph ph-truck text-warn" />
         <b>{fmt(rows.length)}</b>
         <span className="text-text-muted"> 건 출고 대기 · 선택 </span>
-        <b style={{ color: 'var(--c-primary)' }}>{selected.size}</b>
+        <b className="text-primary">{selected.size}</b>
       </div>
       <div className="flex-1 min-h-0">
         <JpkGrid<DeliveryRow>

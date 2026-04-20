@@ -159,8 +159,15 @@ const CSS = `
   background: var(--c-bg-hover);
   color: var(--c-text);
 }
-.jpk-set-filter .jpk-set-reset {
+.jpk-set-filter .jpk-set-apply {
+  background: var(--c-primary);
+  color: #fff;
+  border-color: var(--c-primary);
   font-weight: 600;
+}
+.jpk-set-filter .jpk-set-apply:hover {
+  background: var(--c-primary-h);
+  color: #fff;
 }
 `;
 

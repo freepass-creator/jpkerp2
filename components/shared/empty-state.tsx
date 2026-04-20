@@ -25,26 +25,16 @@ const ICON_SIZE = { sm: 20, md: 28, lg: 36 } as const;
 export function EmptyState({ icon, title, description, action, centered = true, size = 'md' }: Props) {
   return (
     <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: centered ? 'center' : 'flex-start',
-        justifyContent: 'center',
-        textAlign: centered ? 'center' : 'left',
-        padding: PAD[size],
-        color: 'var(--c-text-muted)',
-        gap: 6,
-      }}
+      className="text-text-muted" style={{ display: 'flex', flexDirection: 'column', alignItems: centered ? 'center' : 'flex-start', justifyContent: 'center', textAlign: centered ? 'center' : 'left', padding: PAD[size], gap: 6 }}
     >
       {icon && (
         <i
-          className={`ph ${icon}`}
-          style={{ fontSize: ICON_SIZE[size], color: 'var(--c-text-muted)', opacity: 0.5 }}
+          className={`ph ${icon} text-text-muted`} style={{ fontSize: ICON_SIZE[size], opacity: 0.5 }}
         />
       )}
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--c-text-sub)' }}>{title}</div>
+      <div className="text-base text-text-sub" style={{ fontWeight: 600 }}>{title}</div>
       {description && (
-        <div style={{ fontSize: 11, color: 'var(--c-text-muted)' }}>{description}</div>
+        <div className="text-xs text-text-muted">{description}</div>
       )}
       {action && <div style={{ marginTop: 4 }}>{action}</div>}
     </div>

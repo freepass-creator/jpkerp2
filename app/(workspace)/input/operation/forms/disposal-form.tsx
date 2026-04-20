@@ -93,18 +93,7 @@ export function DisposalForm() {
 
       {activeContract && (
         <div
-          style={{
-            padding: 10,
-            borderRadius: 2,
-            background: 'var(--c-danger-bg, #fdf0ee)',
-            color: 'var(--c-danger)',
-            fontSize: 12,
-            fontWeight: 500,
-            marginBottom: 12,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-          }}
+          className="text-danger text-base" style={{ padding: 10, borderRadius: 2, background: 'var(--c-danger-bg, #fdf0ee)', fontWeight: 500, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}
         >
           <i className="ph ph-warning-circle" />
           진행 중 계약이 있습니다 — {activeContract.contractor_name ?? '계약자 미상'} · {activeContract.contract_status ?? '계약진행'}.
@@ -113,10 +102,10 @@ export function DisposalForm() {
       )}
 
       <div className="form-grid">
-        <Field label="처분 유형" required span={3}>
+        <Field label="처분 유형" required span={2}>
           <BtnGroup value={kind} onChange={setKind} options={KINDS} />
         </Field>
-        <Field label="처분 사유" span={3}>
+        <Field label="처분 사유" span={2}>
           <BtnGroup value={reason} onChange={setReason} options={REASONS} />
         </Field>
 
@@ -134,7 +123,7 @@ export function DisposalForm() {
           <DateInput name="settlement_date" />
         </Field>
 
-        <Field label="메모" span={3}>
+        <Field label="메모" span={2}>
           <TextArea
             name="memo"
             rows={3}

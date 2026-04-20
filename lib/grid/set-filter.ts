@@ -19,6 +19,7 @@ import type {
 
 export class JpkSetFilter implements IFilterComp {
   private params!: IFilterParams;
+  // null = 필터 비활성(전체 보임), Set = 선택된 값만 보임
   private selected: Set<string> | null = null;
   private search = '';
   private values: Array<[string, number]> = [];
@@ -28,6 +29,7 @@ export class JpkSetFilter implements IFilterComp {
   private eSortAsc!: HTMLButtonElement;
   private eSortDesc!: HTMLButtonElement;
   private eMatchCount!: HTMLSpanElement;
+  private eReset!: HTMLButtonElement;
 
   init(params: IFilterParams): void {
     this.params = params;
@@ -48,8 +50,8 @@ export class JpkSetFilter implements IFilterComp {
       </div>
       <div class="jpk-set-list"></div>
       <div class="jpk-set-actions">
-        <button type="button" class="jpk-set-clear">전체 해제</button>
         <button type="button" class="jpk-set-reset">초기화</button>
+        <button type="button" class="jpk-set-apply">적용</button>
       </div>
     `;
     this.eSearch = this.eGui.querySelector('input[type="text"]') as HTMLInputElement;
@@ -57,12 +59,22 @@ export class JpkSetFilter implements IFilterComp {
     this.eSortAsc = this.eGui.querySelector('[data-dir="asc"]') as HTMLButtonElement;
     this.eSortDesc = this.eGui.querySelector('[data-dir="desc"]') as HTMLButtonElement;
     this.eMatchCount = this.eGui.querySelector('.jpk-set-match-count') as HTMLSpanElement;
-    const eClear = this.eGui.querySelector('.jpk-set-clear') as HTMLButtonElement;
-    const eReset = this.eGui.querySelector('.jpk-set-reset') as HTMLButtonElement;
+    this.eReset = this.eGui.querySelector('.jpk-set-reset') as HTMLButtonElement;
 
-    // 검색
+    // 검색 — 입력 즉시 매칭 항목만 선택 + 필터 적용
     this.eSearch.addEventListener('input', () => {
       this.search = this.eSearch.value.trim().toLowerCase();
+      if (this.search) {
+        // 검색어 있으면 매칭되는 값만 선택
+        this.selected = new Set(
+          this.values.filter(([v]) => v.toLowerCase().includes(this.search)).map(([v]) => v),
+        );
+        this.params.filterChangedCallback();
+      } else {
+        // 검색어 비우면 필터 해제 (전체 보임)
+        this.selected = null;
+        this.params.filterChangedCallback();
+      }
       this.renderList();
     });
 
@@ -70,15 +82,14 @@ export class JpkSetFilter implements IFilterComp {
     this.eSortAsc.addEventListener('click', () => this.applySort('asc'));
     this.eSortDesc.addEventListener('click', () => this.applySort('desc'));
 
-    // 전체 해제 (빈 Set — 아무것도 안 보임)
-    eClear.addEventListener('click', () => {
-      this.selected = new Set();
-      this.renderList();
-      this.params.filterChangedCallback();
+    // 적용 — 필터 팝업 닫기
+    const eApply = this.eGui.querySelector('.jpk-set-apply') as HTMLButtonElement;
+    eApply.addEventListener('click', () => {
+      this.params.api.hidePopupMenu();
     });
 
     // 초기화 (null — 필터 OFF, 전체 보임)
-    eReset.addEventListener('click', () => {
+    this.eReset.addEventListener('click', () => {
       this.selected = null;
       this.eSearch.value = '';
       this.search = '';
@@ -144,7 +155,7 @@ export class JpkSetFilter implements IFilterComp {
     const sel = this.selected;
     this.eList.innerHTML = filtered
       .map(([v, n]) => {
-        const checked = sel === null || sel.has(v);
+        const checked = sel !== null && sel.has(v);
         return `<label class="jpk-set-item${checked ? ' is-checked' : ''}">
           <input type="checkbox" data-v="${encodeURIComponent(v)}" ${checked ? 'checked' : ''} />
           <span class="jpk-set-label">${escapeHtml(v)}</span>
@@ -155,17 +166,23 @@ export class JpkSetFilter implements IFilterComp {
     this.eList.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((cb) => {
       cb.addEventListener('change', () => this.onToggle(cb));
     });
+
+    // 초기화 버튼 활성/비활성
+    const hasFilter = this.selected !== null;
+    this.eReset.disabled = !hasFilter;
+    this.eReset.style.opacity = hasFilter ? '1' : '0.35';
   }
 
   private onToggle(cb: HTMLInputElement): void {
     const v = decodeURIComponent(cb.dataset.v ?? '');
     if (this.selected === null) {
-      this.selected = new Set(this.values.map(([x]) => x));
+      this.selected = new Set<string>();
     }
     if (cb.checked) this.selected.add(v);
     else this.selected.delete(v);
+    // 전부 해제되면 필터 비활성 (전체 보임)
+    if (this.selected.size === 0) this.selected = null;
     this.params.filterChangedCallback();
-    // 즉시 리렌더로 is-checked 상태 반영
     this.renderList();
   }
 

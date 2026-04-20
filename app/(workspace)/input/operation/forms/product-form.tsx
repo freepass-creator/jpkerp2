@@ -42,7 +42,7 @@ export function ProductForm() {
         <Field label="제목">
           <TextInput name="title" placeholder="생략 가능" />
         </Field>
-        <Field label="메모" span={3}>
+        <Field label="메모" span={2}>
           <TextArea name="memo" rows={3} />
         </Field>
       </div>
