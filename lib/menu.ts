@@ -34,7 +34,7 @@ export const MENU: MenuEntry[] = [
     icon: 'plus',
     children: [
       { href: '/input/operation', label: '운영업무', icon: 'play' },
-      { href: '/upload', label: '일괄 업로드', icon: 'fileup' },
+      { href: '/upload', label: '일괄 불러오기', icon: 'fileup' },
       { href: '/input', label: '개별 입력', icon: 'circleplus' },
       { href: '/input/history', label: '입력 이력', icon: 'listcheck' },
     ],
@@ -71,6 +71,7 @@ export const MENU: MenuEntry[] = [
       { href: '/return-schedule', label: '반납 일정' },
       { href: '/operation/maint', label: '정비 이력' },
       { href: '/operation/accident', label: '사고 이력' },
+      { href: '/operation/penalty', label: '과태료 처리' },
       { href: '/operation/wash', label: '세차' },
 
       { subgroup: '영업관리', icon: 'clipcheck' },

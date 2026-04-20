@@ -129,11 +129,11 @@ export const PhotoUploader = forwardRef<PhotoUploaderHandle, Props>(function Pho
           if (e.dataTransfer.files) addFiles(e.dataTransfer.files);
         }}
       >
-        <i className="ph ph-upload-simple" style={{ fontSize: 18 }} />
-        <span style={{ fontSize: 12, letterSpacing: '-0.02em' }}>
+        <i className="ph ph-upload-simple text-[18px]" />
+        <span className="text-base" style={{ letterSpacing: '-0.02em' }}>
           {files.length > 0 ? `${files.length}개 선택됨` : `${label} 드래그 또는 클릭`}
         </span>
-        <span className="text-text-muted" style={{ fontSize: 10 }}>
+        <span className="text-text-muted text-2xs">
           {files.length}/{maxFiles}
         </span>
         <input
@@ -159,10 +159,10 @@ export const PhotoUploader = forwardRef<PhotoUploaderHandle, Props>(function Pho
                 </div>
               )}
               <div className="jpk-uploader-meta">
-                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11 }}>
+                <div className="text-xs" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {f.name}
                 </div>
-                <div className="text-text-muted" style={{ fontSize: 10 }}>
+                <div className="text-text-muted text-2xs">
                   {(f.size / 1024).toFixed(1)} KB
                 </div>
               </div>
@@ -180,7 +180,7 @@ export const PhotoUploader = forwardRef<PhotoUploaderHandle, Props>(function Pho
       )}
 
       {uploading && (
-        <div className="text-text-muted" style={{ fontSize: 11, marginTop: 4 }}>
+        <div className="text-text-muted text-xs" style={{ marginTop: 4 }}>
           <i className="ph ph-spinner spin" /> 업로드 중...
         </div>
       )}

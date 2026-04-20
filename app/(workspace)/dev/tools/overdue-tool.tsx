@@ -158,9 +158,9 @@ export function OverdueTool() {
 
       {/* 수기 미수 등록 폼 */}
       <div style={{ padding: 12, borderBottom: '1px solid var(--c-border)', background: 'var(--c-bg-sub)' }}>
-        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
+        <div className="text-base" style={{ fontWeight: 600, marginBottom: 6 }}>
           <i className="ph ph-plus-circle" style={{ marginRight: 4 }} />수기 미수 등록
-          <span className="text-text-muted" style={{ fontSize: 10, fontWeight: 400, marginLeft: 6 }}>
+          <span className="text-text-muted text-2xs" style={{ fontWeight: 400, marginLeft: 6 }}>
             · 자동 파생 안 되는 예외 billing 수기 생성
           </span>
         </div>
@@ -170,7 +170,7 @@ export function OverdueTool() {
             onChange={(v) => setCarNumber(v)}
             placeholder="차량번호"
           />
-          <div style={{ fontSize: 11, color: matchedContract ? 'var(--c-text)' : 'var(--c-text-muted)', padding: '8px 0' }}>
+          <div className="text-xs" style={{ color: matchedContract ? 'var(--c-text)' : 'var(--c-text-muted)', padding: '8px 0' }}>
             {matchedContract
               ? `${matchedContract.contractor_name ?? '—'} · ${matchedContract.contract_code ?? ''}`
               : carNumber ? '활성 계약 없음' : '차량 선택 시 계약 매칭'}
@@ -178,27 +178,27 @@ export function OverdueTool() {
           <input
             type="text"
             inputMode="numeric"
-            className="ctrl num"
+            className="ctrl num text-base"
             value={amount}
             onChange={(e) => setAmount(e.target.value.replace(/[^\d,]/g, ''))}
             placeholder="미수금액"
-            style={{ height: 32, fontSize: 12, textAlign: 'right' }}
+            style={{ height: 32, textAlign: 'right' }}
           />
           <input
             type="date"
-            className="ctrl"
+            className="ctrl text-base"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
-            style={{ height: 32, fontSize: 12 }}
+            style={{ height: 32 }}
           />
         </div>
       </div>
 
-      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--c-border)', fontSize: 12 }}>
-        <i className="ph ph-magnifying-glass" style={{ color: 'var(--c-danger)', marginRight: 4 }} />
+      <div className="text-base" style={{ padding: '10px 14px', borderBottom: '1px solid var(--c-border)' }}>
+        <i className="ph ph-magnifying-glass text-danger" style={{ marginRight: 4 }} />
         <b>{fmt(rows.length)}</b>
         <span className="text-text-muted"> 건 연체 · 총 미납 </span>
-        <b style={{ color: 'var(--c-danger)' }}>{fmt(totalUnpaid)}원</b>
+        <b className="text-danger">{fmt(totalUnpaid)}원</b>
       </div>
       <div className="flex-1 min-h-0">
         <JpkGrid<OverdueRow>

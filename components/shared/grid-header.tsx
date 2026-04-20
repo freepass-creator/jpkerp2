@@ -1,15 +1,12 @@
 'use client';
 
 import type { IHeaderParams } from 'ag-grid-community';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 
-/**
- * 엑셀식 헤더 — 클릭하면 필터 드롭다운 열림, 별도 필터 아이콘 없음.
- * 정렬은 필터 드롭다운 안의 오름/내림 버튼으로 처리.
- */
 export function JpkHeader(props: IHeaderParams) {
   const [sort, setSort] = useState<'asc' | 'desc' | null>(null);
   const [filtered, setFiltered] = useState(false);
+  const justClosed = useRef(false);
 
   useEffect(() => {
     const col = props.column;
@@ -24,20 +21,35 @@ export function JpkHeader(props: IHeaderParams) {
     };
   }, [props.column]);
 
-  const handleClick = (e: React.MouseEvent) => {
+  const handleClick = useCallback((e: React.MouseEvent) => {
     if (props.column.getColDef().filter === false) {
-      // 필터 없는 컬럼 (숫자 등) — 헤더 클릭 = 정렬 토글
       props.progressSort(e.shiftKey);
       return;
     }
-    // 필터 있는 컬럼 — 필터 드롭다운 열기
+    // AG Grid가 클릭 시 기존 팝업을 먼저 닫음 → 직후 showColumnMenu 호출하면 다시 열림
+    // justClosed 플래그로 방금 닫힌 직후엔 열지 않음
+    if (justClosed.current) {
+      justClosed.current = false;
+      return;
+    }
     props.showColumnMenu(e.currentTarget as HTMLElement);
-  };
+  }, [props]);
+
+  // 팝업 닫힘 감지 — mousedown 시점에 팝업이 있었으면 닫히는 거니까 스킵
+  const handleMouseDown = useCallback(() => {
+    const popup = document.querySelector('.ag-popup');
+    if (popup) {
+      justClosed.current = true;
+      // 다음 틱에서 리셋 (클릭 이벤트 이후)
+      setTimeout(() => { justClosed.current = false; }, 300);
+    }
+  }, []);
 
   return (
     <button
       type="button"
       className="jpk-header"
+      onMouseDown={handleMouseDown}
       onClick={handleClick}
       data-sorted={sort ?? undefined}
       data-filtered={filtered || undefined}

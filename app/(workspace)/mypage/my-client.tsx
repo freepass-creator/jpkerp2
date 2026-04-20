@@ -112,24 +112,15 @@ export function MyClient() {
         }}
       >
         <div
-          style={{
-            width: 56, height: 56,
-            borderRadius: '50%',
-            background: 'var(--c-primary)',
-            color: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 22, fontWeight: 700,
-            letterSpacing: '-0.02em',
-            flexShrink: 0,
-          }}
+          className="text-[22px]" style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--c-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, letterSpacing: '-0.02em', flexShrink: 0 }}
         >
           {initials}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 16, fontWeight: 600 }}>
+          <div className="text-[16px]" style={{ fontWeight: 600 }}>
             {form.name ?? user.displayName ?? user.email ?? '-'}
           </div>
-          <div className="text-text-sub" style={{ fontSize: 12, marginTop: 2 }}>
+          <div className="text-text-sub text-base" style={{ marginTop: 2 }}>
             {user.email}
             {form.role && <span style={{ marginLeft: 8 }}>· {ROLE_LABEL[form.role] ?? form.role}</span>}
             {form.join_date && <span style={{ marginLeft: 8 }}>· 입사 {fmtDate(form.join_date)}</span>}
@@ -175,7 +166,7 @@ export function MyClient() {
       <div className="form-section">
         <div className="form-section-title">
           <i className="ph ph-shield" />권한
-          <span className="text-text-muted" style={{ fontSize: 10, fontWeight: 400, marginLeft: 6 }}>
+          <span className="text-text-muted text-2xs" style={{ fontWeight: 400, marginLeft: 6 }}>
             (변경은 관리자에게 문의)
           </span>
         </div>

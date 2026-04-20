@@ -215,15 +215,14 @@ export function CommandPalette() {
         role="presentation"
       >
         <div className="flex items-center gap-2 px-3 h-11 border-b border-border">
-          <i className="ph ph-magnifying-glass text-text-muted" style={{ fontSize: 14 }} />
+          <i className="ph ph-magnifying-glass text-text-muted text-[14px]" />
           <input
             autoFocus
             type="text"
             placeholder="차량번호 · 계약자 · 고객명 · 페이지 검색..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="flex-1 bg-transparent outline-none border-none"
-            style={{ fontSize: 13, letterSpacing: '-0.01em' }}
+            className="flex-1 bg-transparent outline-none border-none text-xl" style={{ letterSpacing: '-0.01em' }}
           />
           <kbd className="kbd">Esc</kbd>
         </div>
@@ -247,9 +246,9 @@ export function CommandPalette() {
                   {KIND_LABEL[it.kind]}
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 500 }}>{it.label}</div>
+                  <div className="text-base" style={{ fontWeight: 500 }}>{it.label}</div>
                   {it.sub && (
-                    <div className="text-text-muted" style={{ fontSize: 11, marginTop: 1 }}>
+                    <div className="text-text-muted text-xs" style={{ marginTop: 1 }}>
                       {it.sub}
                     </div>
                   )}
@@ -259,7 +258,7 @@ export function CommandPalette() {
             ))
           )}
         </div>
-        <div className="border-t border-border px-3 py-1.5 text-text-muted flex items-center gap-3" style={{ fontSize: 10 }}>
+        <div className="border-t border-border px-3 py-1.5 text-text-muted flex items-center gap-3 text-2xs">
           <span>↑↓ 이동</span>
           <span>Enter 선택</span>
           <span className="ml-auto">{items.length}개 결과</span>

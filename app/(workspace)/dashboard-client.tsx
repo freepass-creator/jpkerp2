@@ -70,7 +70,7 @@ export function DashboardClient() {
     { icon: 'ph-stack-plus', label: '운영업무 입력', href: '/input/operation', tone: 'primary' as const },
     { icon: 'ph-receipt', label: '과태료작업', href: '/input/operation?type=penalty_notice' },
     { icon: 'ph-bank', label: '자금 CSV 업로드', href: '/fund' },
-    { icon: 'ph-upload-simple', label: '일괄 업로드', href: '/upload' },
+    { icon: 'ph-upload-simple', label: '일괄 불러오기', href: '/upload' },
     { icon: 'ph-file-text', label: '개별 입력', href: '/input' },
   ];
 
@@ -126,7 +126,7 @@ export function DashboardClient() {
                   className="panel dashboard-row"
                   style={{ textDecoration: 'none', color: 'inherit' }}
                 >
-                  <i className={`ph ${row.icon} ${toneClass}`} style={{ fontSize: 16 }} />
+                  <i className={`ph ${row.icon} ${toneClass} text-[16px]`} />
                   <div className="flex-1">{row.label}</div>
                   <div className={`text-base font-bold num ${row.count > 0 ? toneClass : 'text-text-muted'}`}>
                     {row.count}
@@ -146,7 +146,7 @@ export function DashboardClient() {
           </div>
           <div className="panel" style={{ padding: 0 }}>
             {recent.length === 0 ? (
-              <div style={{ padding: 24, textAlign: 'center', color: 'var(--c-text-muted)', fontSize: 11 }}>
+              <div className="text-text-muted text-xs" style={{ padding: 24, textAlign: 'center' }}>
                 입력 이력이 없습니다
               </div>
             ) : (
@@ -161,7 +161,7 @@ export function DashboardClient() {
                       style={{ textDecoration: 'none', color: 'inherit' }}
                     >
                       <span className="dashboard-recent-date num">{fmtDate(e.date)}</span>
-                      <i className={`ph ${meta.icon}`} style={{ color: meta.color, fontSize: 13 }} />
+                      <i className={`ph ${meta.icon} text-xl`} style={{ color: meta.color }} />
                       <span className="dashboard-recent-type">{meta.label}</span>
                       <span className="dashboard-recent-car num">{e.car_number ?? '—'}</span>
                       <span className="dashboard-recent-title">{e.title ?? '-'}</span>

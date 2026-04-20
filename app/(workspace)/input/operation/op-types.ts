@@ -24,7 +24,7 @@ export const OP_LABELS: Record<OpKey, string> = {
   contact: '고객센터',
   accident: '사고접수',
   ignition: '시동제어',
-  insurance: '보험배서관리',
+  insurance: '보험관리',
   product_register: '상품등록',
   penalty_notice: '과태료작업',
   disposal: '자산처분',

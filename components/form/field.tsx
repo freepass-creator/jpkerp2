@@ -59,56 +59,23 @@ export function CompactDateInput({ value, onChange, required, name }: {
   required?: boolean;
   name?: string;
 }) {
-  const ref = useRef<HTMLInputElement>(null);
-  const [open, setOpen] = useState(false);
-  const toggle = () => {
-    const el = ref.current;
-    if (!el) return;
-    if (open) {
-      el.blur();
-      setOpen(false);
-    } else {
-      el.focus();
-      try { el.showPicker?.(); } catch { /* noop */ }
-      setOpen(true);
-    }
-  };
-  const handleKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      ref.current?.blur();
-      setOpen(false);
-    } else if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      toggle();
-    }
-  };
-  const full = value || '';
-  const short = value ? value.slice(2) : '';
-  const mini = value ? value.slice(5).replace('-', '/') : '';
   return (
-    <div
-      className="date-compact"
-      role="button"
-      tabIndex={0}
-      onClick={toggle}
-      onKeyDown={handleKey}
-      data-open={open || undefined}
-    >
-      <span className="date-compact-full">{full || '날짜 선택'}</span>
-      <span className="date-compact-short">{short || '—'}</span>
-      <span className="date-compact-mini">{mini || '—'}</span>
-      <i className="ph ph-calendar-dots" />
+    <div className="date-compact">
       <input
-        ref={ref}
         type="date"
         value={value}
         required={required}
         name={name}
         onChange={(e) => onChange(e.target.value)}
-        onBlur={() => setOpen(false)}
-        onKeyDown={(e) => { if (e.key === 'Escape') { ref.current?.blur(); setOpen(false); } }}
-        className="date-compact-native"
+        style={{
+          position: 'absolute', inset: 0, width: '100%', height: '100%',
+          opacity: 0, cursor: 'pointer', zIndex: 1,
+        }}
       />
+      <span className="date-compact-full">{value || '날짜 선택'}</span>
+      <span className="date-compact-short">{value ? value.slice(2) : '—'}</span>
+      <span className="date-compact-mini">{value ? value.slice(5).replace('-', '/') : '—'}</span>
+      <i className="ph ph-calendar-dots" />
     </div>
   );
 }

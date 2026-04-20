@@ -66,8 +66,7 @@ export function InputWorkspace() {
         <div className="panel-head">
           <div>
             <i
-              className={`ph ${INPUT_ICONS[selected]}`}
-              style={{ color: 'var(--c-text-sub)', fontSize: 18 }}
+              className={`ph ${INPUT_ICONS[selected]} text-text-sub text-[18px]`}
             />
             <span className="panel-title">{INPUT_LABELS[selected]}</span>
             <span className="panel-subtitle">{INPUT_SUBS[selected]}</span>

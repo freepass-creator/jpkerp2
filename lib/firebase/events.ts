@@ -1,6 +1,7 @@
 import { ref, push, set, get, query, orderByChild, equalTo, serverTimestamp, update } from 'firebase/database';
 import { getRtdb } from './rtdb';
 import { reconcilePayment } from '@/lib/derive/payment-match';
+import { genEventCode } from '@/lib/code-gen';
 import type { RtdbEvent } from '@/lib/types/rtdb-entities';
 
 function shouldReconcile(data: Partial<RtdbEvent>): boolean {
@@ -19,6 +20,7 @@ export async function saveEvent(
   const r = push(ref(getRtdb(), 'events'));
   const payload = {
     ...data,
+    event_code: data.event_code || genEventCode(),
     created_at: Date.now(),
     updated_at: serverTimestamp(),
     status: 'active',

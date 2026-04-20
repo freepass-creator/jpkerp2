@@ -78,7 +78,7 @@ export function ItemTable({ title, icon, columns, rows, onChange, itemSuggestion
       <div className="form-section-title">
         {icon && <i className={`ph ${icon}`} />}
         {title}
-        <span className="text-text-muted" style={{ marginLeft: 6, fontSize: 10, fontWeight: 500 }}>
+        <span className="text-text-muted text-2xs" style={{ marginLeft: 6, fontWeight: 500 }}>
           {local.length > 0 && `${local.length}건 · ${total.toLocaleString()}원`}
         </span>
         <button
@@ -124,20 +124,7 @@ export function ItemTable({ title, icon, columns, rows, onChange, itemSuggestion
         <button
           type="button"
           onClick={() => add()}
-          className="text-text-muted"
-          style={{
-            width: '100%',
-            fontSize: 11,
-            padding: '16px',
-            textAlign: 'center',
-            border: '1px dashed var(--c-border)',
-            borderRadius: 2,
-            background: 'transparent',
-            color: 'var(--c-text-muted)',
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-            transition: 'background var(--t-fast), color var(--t-fast), border-color var(--t-fast)',
-          }}
+          className="text-text-muted text-xs text-text-muted" style={{ width: '100%', padding: '16px', textAlign: 'center', border: '1px dashed var(--c-border)', borderRadius: 2, background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', transition: 'background var(--t-fast), color var(--t-fast), border-color var(--t-fast)' }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = 'var(--c-bg-hover)';
             e.currentTarget.style.borderColor = 'var(--c-border-strong)';

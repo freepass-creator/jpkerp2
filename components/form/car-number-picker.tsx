@@ -106,7 +106,7 @@ export function CarNumberPicker({
     return (
       <>
         {s.slice(0, idx)}
-        <mark style={{ background: 'var(--c-primary-bg)', color: 'var(--c-primary)', padding: 0 }}>
+        <mark className="text-primary" style={{ background: 'var(--c-primary-bg)', padding: 0 }}>
           {s.slice(idx, idx + q.length)}
         </mark>
         {s.slice(idx + q.length)}
@@ -170,29 +170,14 @@ export function CarNumberPicker({
                 onMouseDown={(e) => e.preventDefault()}
                 onMouseEnter={() => setHoverIdx(i)}
                 onClick={() => select(a)}
-                style={{
-                  padding: '6px 10px',
-                  display: 'grid',
-                  gridTemplateColumns: 'auto 1fr auto',
-                  gap: 8,
-                  cursor: 'pointer',
-                  background: i === hoverIdx ? 'var(--c-bg-hover)' : 'transparent',
-                  fontSize: 12,
-                  borderBottom: '1px solid var(--c-border)',
-                  alignItems: 'center',
-                }}
+                className="text-base" style={{ padding: '6px 10px', display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 8, cursor: 'pointer', background: i === hoverIdx ? 'var(--c-bg-hover)' : 'transparent', borderBottom: '1px solid var(--c-border)', alignItems: 'center' }}
               >
-                <span style={{ fontWeight: 600, color: 'var(--c-text)' }}>
+                <span className="text-text" style={{ fontWeight: 600 }}>
                   {renderMarked(String(a.car_number ?? ''))}
                 </span>
                 <span
                   title={model}
-                  style={{
-                    color: 'var(--c-text-sub)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
+                  className="text-text-sub" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                 >
                   {model}
                 </span>
@@ -215,27 +200,14 @@ export function CarNumberPicker({
       )}
       {showEmpty && showCreate && (
         <div
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 2px)',
-            left: 0,
-            right: 0,
-            zIndex: 20,
-            background: 'var(--c-surface)',
-            border: '1px solid var(--c-border)',
-            borderRadius: 2,
-            padding: '8px 10px',
-            fontSize: 12,
-            color: 'var(--c-text-muted)',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-          }}
+          className="text-base text-text-muted" style={{ position: 'absolute', top: 'calc(100% + 2px)', left: 0, right: 0, zIndex: 20, background: 'var(--c-surface)', border: '1px solid var(--c-border)', borderRadius: 2, padding: '8px 10px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
           onMouseDown={(e) => e.preventDefault()}
         >
           매칭 없음 —{' '}
           <Link
             href="/input?type=asset"
             target="_blank"
-            style={{ color: 'var(--c-primary)', fontWeight: 600 }}
+            className="text-primary" style={{ fontWeight: 600 }}
           >
             <i className="ph ph-plus" style={{ marginRight: 4 }} />새 차량 등록
           </Link>

@@ -35,7 +35,7 @@ export function InsuranceForm() {
         <i className="ph ph-shield-check" />보험 관리
       </div>
       <div className="form-grid">
-        <Field label="업무 구분" required span={3}>
+        <Field label="업무 구분" required span={2}>
           <BtnGroup value={kind} onChange={setKind} options={KINDS} />
         </Field>
         <Field label="보험사" required>
@@ -60,12 +60,12 @@ export function InsuranceForm() {
         </Field>
 
         {kind === '배서(연령변경)' && (
-          <Field label="변경 후 연령" span={3}>
+          <Field label="변경 후 연령" span={2}>
             <BtnGroup value={ageAfter} onChange={setAgeAfter} options={AGE_AFTER} />
           </Field>
         )}
 
-        <Field label="메모" span={3}>
+        <Field label="메모" span={2}>
           <TextArea name="memo" rows={2} placeholder="특이사항" />
         </Field>
       </div>

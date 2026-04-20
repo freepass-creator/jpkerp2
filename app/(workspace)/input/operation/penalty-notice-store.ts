@@ -9,6 +9,7 @@ export interface PenaltyWorkItem extends PenaltyParsed {
   fileName: string;
   fileDataUrl: string;
   fileSize: number;
+  pageNumber?: number;        // PDF 페이지 번호
   _asset?: RtdbAsset | null;
   _contract?: RtdbContract | null;
   _contractor?: string;

@@ -48,7 +48,7 @@ export default function PenaltyPrintPage() {
   if (items.length === 0) {
     return (
       <div className="print-shell">
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--c-text-muted)' }}>
+        <div className="text-text-muted" style={{ textAlign: 'center', padding: 40 }}>
           인쇄할 고지서가 없습니다.
         </div>
       </div>
@@ -65,7 +65,7 @@ export default function PenaltyPrintPage() {
           닫기
         </button>
         <div className="spacer" />
-        <span style={{ fontSize: 12, color: 'var(--c-text-muted)' }}>
+        <span className="text-base text-text-muted">
           {items.length}건 · 각 2페이지 (원본 · 확인서)
         </span>
       </div>
@@ -105,12 +105,12 @@ function PenaltyItemPages({ item, isLast }: { item: PenaltyWorkItem; isLast: boo
           // eslint-disable-next-line @next/next/no-img-element
           <img src={item.fileDataUrl} alt={item.fileName} />
         ) : isPdf ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--c-text-muted)', fontSize: 13 }}>
+          <div className="text-text-muted text-xl" style={{ padding: 40, textAlign: 'center' }}>
             원본 PDF 파일: <b>{item.fileName}</b><br />
-            <span style={{ fontSize: 11 }}>(PDF는 인쇄에 포함되지 않음 — 별도 출력 필요)</span>
+            <span className="text-xs">(PDF는 인쇄에 포함되지 않음 — 별도 출력 필요)</span>
           </div>
         ) : (
-          <div style={{ padding: 40, color: 'var(--c-text-muted)' }}>원본 첨부 없음</div>
+          <div className="text-text-muted" style={{ padding: 40 }}>원본 첨부 없음</div>
         )}
       </div>
 
@@ -148,12 +148,7 @@ function PenaltyItemPages({ item, isLast }: { item: PenaltyWorkItem; isLast: boo
         </table>
 
         <div
-          style={{
-            marginTop: 40,
-            textAlign: 'right',
-            color: 'var(--c-text-muted)',
-            fontSize: 11,
-          }}
+          className="text-text-muted text-xs" style={{ marginTop: 40, textAlign: 'right' }}
         >
           발행일: {new Date().toISOString().slice(0, 10)}
         </div>

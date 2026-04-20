@@ -118,20 +118,19 @@ export function PcForm() {
         };
       }}
     >
-      {/* 작업 구분 / 상태 */}
-      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 16 }}>
-        <div>
-          <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>작업 구분</label>
-          <BtnGroup value={kind} onChange={setKind} options={['정비', '사고수리', '상품화', '세차']} />
-        </div>
-        <div>
-          <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>작업 상태</label>
-          <BtnGroup value={status} onChange={setStatus} options={['접수', '진행중', '완료']} />
-        </div>
+      {/* 공통 — 작업 구분 / 상태 / 출발지 / 도착지 */}
+      <div className="form-section-title">
+        <i className="ph ph-sparkle" />차량 케어
       </div>
-
-      {/* 공통 */}
-      <div className="form-grid" style={{ marginBottom: 16 }}>
+      <div className="form-row">
+        <Field label="작업 구분" required>
+          <BtnGroup value={kind} onChange={setKind} options={['정비', '사고수리', '상품화', '세차']} />
+        </Field>
+        <Field label="작업 상태">
+          <BtnGroup value={status} onChange={setStatus} options={['접수', '진행중', '완료']} />
+        </Field>
+      </div>
+      <div className="form-row" style={{ marginTop: 12 }}>
         <Field label="출발지">
           <TextInput name="from_location" placeholder="출발 위치" />
         </Field>
@@ -176,7 +175,7 @@ export function PcForm() {
               <Field label="다음정비예정">
                 <DateInput name="next_maint_date" />
               </Field>
-              <Field label="메모" span={3}>
+              <Field label="메모" span={2}>
                 <TextArea name="note" rows={2} />
               </Field>
             </div>
@@ -189,7 +188,7 @@ export function PcForm() {
         <div className="form-section">
           <div className="form-section-title"><i className="ph ph-hammer" />사고수리 정보</div>
           <div className="form-grid">
-            <Field label="사고부위" span={3}>
+            <Field label="사고부위" span={2}>
               <BtnGroup
                 value={damageArea}
                 onChange={setDamageArea}
@@ -217,7 +216,7 @@ export function PcForm() {
             <Field label="예상 완료일">
               <DateInput name="expected_delivery" />
             </Field>
-            <Field label="메모" span={3}>
+            <Field label="메모" span={2}>
               <TextArea name="note" rows={2} />
             </Field>
           </div>
@@ -306,7 +305,7 @@ export function PcForm() {
               <Field label="예상 완료일">
                 <DateInput name="expected_delivery" />
               </Field>
-              <Field label="메모" span={3}>
+              <Field label="메모" span={2}>
                 <TextArea name="note" rows={2} />
               </Field>
             </div>
@@ -335,7 +334,7 @@ export function PcForm() {
             <Field label="예상 완료일">
               <DateInput name="expected_delivery" />
             </Field>
-            <Field label="메모" span={3}>
+            <Field label="메모" span={2}>
               <TextArea name="note" rows={2} />
             </Field>
           </div>

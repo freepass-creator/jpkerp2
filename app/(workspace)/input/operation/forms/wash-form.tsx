@@ -26,7 +26,7 @@ export function WashForm() {
         <i className="ph ph-drop" />세차 · 크리닝
       </div>
       <div className="form-grid">
-        <Field label="세차 구분" required span={3}>
+        <Field label="세차 구분" required span={2}>
           <BtnGroup value={washType} onChange={setWashType} options={WASH_TYPES} />
         </Field>
         <Field label="업체">
@@ -38,7 +38,7 @@ export function WashForm() {
         <Field label="제목">
           <TextInput name="title" placeholder="생략 가능" />
         </Field>
-        <Field label="메모" span={3}>
+        <Field label="메모" span={2}>
           <TextArea name="memo" rows={2} />
         </Field>
       </div>

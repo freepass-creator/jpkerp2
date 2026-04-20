@@ -6,7 +6,7 @@ import { ref as rtdbRef, update, serverTimestamp } from 'firebase/database';
 import { getRtdb } from '@/lib/firebase/rtdb';
 import { OpFormBase } from '../op-form-base';
 import { Field, TextInput, NumberInput, TextArea, PhoneInput } from '@/components/form/field';
-import { BtnGroup } from '@/components/form/btn-group';
+import { BtnGroup, BtnGroupMulti } from '@/components/form/btn-group';
 import { FavChips } from '@/components/form/fav-chips';
 import { useLocations, useLastFrom } from '@/lib/hooks/useOpPrefs';
 import { useRtdbCollection } from '@/lib/collections/rtdb';
@@ -64,29 +64,18 @@ const KEY_FIELDS = [
   { key: 'key_etc', label: '기타' },
 ];
 
-function ChkGrid({ cols, flags, toggle, items }: {
-  cols: number;
-  flags: Record<string, boolean>;
-  toggle: (k: string) => void;
+function MultiField({ label, items, flags, setFlags }: {
+  label: string;
   items: { key: string; label: string }[];
+  flags: Record<string, boolean>;
+  setFlags: (v: Record<string, boolean>) => void;
 }) {
   return (
-    <div className="form-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
-      {items.map((it) => (
-        <label
-          key={it.key}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}
-        >
-          <input
-            type="checkbox"
-            checked={!!flags[it.key]}
-            onChange={() => toggle(it.key)}
-            style={{ width: 14, height: 14 }}
-          />
-          {it.label}
-        </label>
-      ))}
-    </div>
+    <BtnGroupMulti
+      options={items.map((it) => ({ value: it.key, label: it.label }))}
+      values={flags}
+      onChange={setFlags}
+    />
   );
 }
 
@@ -109,7 +98,6 @@ export function IocForm() {
 
   // 체크박스 플래그 (키·출고확인·비품)
   const [flags, setFlags] = useState<Record<string, boolean>>({});
-  const toggle = (k: string) => setFlags((s) => ({ ...s, [k]: !s[k] }));
 
   // 정상출고 — 보험증권 OCR 검증 결과
   const [insCertStatus, setInsCertStatus] = useState<'idle' | 'pass' | 'fail'>('idle');
@@ -161,6 +149,13 @@ export function IocForm() {
         }
       } : undefined}
       buildPayload={(d) => {
+        // 정상출고 — 출고 필수 확인 6개 모두 체크 필수
+        if (kind === '정상출고') {
+          const unchecked = DELIVERY_CHECKS.filter((c) => !flags[c.key]);
+          if (unchecked.length > 0) {
+            throw new Error(`출고 필수 확인 미완료: ${unchecked.map((c) => c.label).join(', ')}`);
+          }
+        }
         if (from) { locations.add(from); setLastFrom(from); }
         if (to) locations.add(to);
         const base: Record<string, unknown> = {
@@ -319,34 +314,24 @@ export function IocForm() {
         }
       }}
     >
+      {/* ── 공통 (4가지 업무 동일 규격) ── */}
       <div className="form-section-title">
         <i className="ph ph-arrows-in-line-horizontal" />입출고 · 차량 이동
       </div>
-      <div className="form-grid">
-        <Field label="업무 구분" required span={3}>
+      <div className="form-row">
+        <Field label="업무 구분" required>
           <BtnGroup value={kind} onChange={setKind} options={KINDS} />
         </Field>
-        <Field label="이동 방식" span={3}>
+        <Field label="이동 방식">
           <BtnGroup value={handover} onChange={setHandover} options={HANDOVER} />
         </Field>
-
-        {kind === '정상출고' && (
-          <div style={{ gridColumn: 'span 3' }}>
-            <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>
-              운전자 연령 확인{' '}
-              <span className="text-text-muted" style={{ fontSize: 10 }}>
-                (보험연령: <b>{insAgeRef}</b>)
-              </span>
-            </label>
-            <BtnGroup value={driverAge} onChange={setDriverAge} options={AGE_OPTIONS} />
-          </div>
-        )}
-
+      </div>
+      <div className="form-row" style={{ marginTop: 12 }}>
         <Field label="출발지">
           <TextInput value={from} onChange={(e) => setFrom(e.target.value)} autoComplete="off" placeholder="예: 용인센터" />
           <FavChips items={locations.list} onPick={setFrom} onDelete={(v) => locations.remove(v)} />
         </Field>
-        <Field label={kind === '정상출고' ? '인도장소' : kind === '정상반납' ? '반납장소' : '도착지'} required>
+        <Field label="도착지" required>
           <TextInput
             value={to}
             onChange={(e) => setTo(e.target.value)}
@@ -356,56 +341,71 @@ export function IocForm() {
           />
           <FavChips items={locations.list} onPick={setTo} onDelete={(v) => locations.remove(v)} />
         </Field>
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <Field label="메모">
+          <TextArea name="memo" rows={2} placeholder="탁송기사 연락처·특이사항" />
+        </Field>
+      </div>
 
-        {kind === '정상출고' && (
-          <>
+      {/* ── 정상출고 전용 ── */}
+      {kind === '정상출고' && (
+        <div className="form-section">
+          <div className="form-section-title"><i className="ph ph-user-check" />출고 정보</div>
+          <Field label="운전자 연령">
+            <BtnGroup value={driverAge} onChange={setDriverAge} options={AGE_OPTIONS} />
+            <span className="text-text-muted text-2xs" style={{ marginTop: 4 }}>
+              보험연령: <b>{insAgeRef}</b>
+            </span>
+          </Field>
+          <div className="form-row" style={{ marginTop: 12 }}>
             <Field label="인수자명">
               <TextInput value={receiverName} onChange={(e) => setReceiverName(e.target.value)} />
             </Field>
             <Field label="인수자 연락처">
               <PhoneInput value={receiverPhone} onChange={setReceiverPhone} />
             </Field>
-          </>
-        )}
-
-        <Field label="메모" span={3}>
-          <TextArea name="memo" rows={2} placeholder="탁송기사 연락처·특이사항" />
-        </Field>
-      </div>
+          </div>
+        </div>
+      )}
 
       {/* 차량 상태 — 정상출고·정상반납·강제회수 공통 */}
       {(kind === '정상출고' || kind === '정상반납' || kind === '강제회수') && (
         <div className="form-section">
           <div className="form-section-title"><i className="ph ph-gauge" />차량 상태</div>
-          <div className="form-grid">
+          <div className="form-row">
             <Field label="주행거리 (km)">
               <NumberInput name="mileage" placeholder="0" />
             </Field>
-            <Field label="연료잔량" span={2}>
+            <Field label="연료잔량">
               <BtnGroup value={fuelLevel} onChange={setFuelLevel} options={FUEL_LEVELS} />
             </Field>
-            <Field label="외관상태" span={3}>
+          </div>
+          <div className="form-row" style={{ marginTop: 12 }}>
+            <Field label="외관상태">
               <BtnGroup value={exterior} onChange={setExterior} options={EXTERIORS} />
             </Field>
-            <Field label="실내상태" span={3}>
+            <Field label="실내상태">
               <BtnGroup value={interior} onChange={setInterior} options={INTERIORS} />
             </Field>
-            {kind === '정상반납' && (
-              <>
-                <Field label="차량상태" span={3}>
-                  <BtnGroup value={carCondition} onChange={setCarCondition} options={['양호', '경미손상', '수리필요', '사고차']} />
-                </Field>
-                <Field label="세차상태" span={3}>
-                  <BtnGroup value={washStatus} onChange={setWashStatus} options={WASH_STATES} />
-                </Field>
-              </>
-            )}
-            {kind === '강제회수' && (
-              <Field label="차량상태" span={3}>
+          </div>
+          {kind === '정상반납' && (
+            <div className="form-row" style={{ marginTop: 12 }}>
+              <Field label="차량상태">
+                <BtnGroup value={carCondition} onChange={setCarCondition} options={['양호', '경미손상', '수리필요', '사고차']} />
+              </Field>
+              <Field label="세차상태">
+                <BtnGroup value={washStatus} onChange={setWashStatus} options={WASH_STATES} />
+              </Field>
+            </div>
+          )}
+          {kind === '강제회수' && (
+            <div style={{ marginTop: 12 }}>
+              <Field label="차량상태">
                 <BtnGroup value={carCondition} onChange={setCarCondition} options={CAR_CONDITIONS} />
               </Field>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -416,7 +416,11 @@ export function IocForm() {
             <i className="ph ph-key" />
             {kind === '정상출고' ? '키 인도' : '키 회수'}
           </div>
-          <ChkGrid cols={4} flags={flags} toggle={toggle} items={KEY_FIELDS} />
+          <BtnGroupMulti
+            options={KEY_FIELDS.map((it) => ({ value: it.key, label: it.label }))}
+            values={flags}
+            onChange={setFlags}
+          />
         </div>
       )}
 
@@ -424,7 +428,11 @@ export function IocForm() {
       {kind === '정상출고' && (
         <div className="form-section">
           <div className="form-section-title"><i className="ph ph-check-square" />출고 필수 확인</div>
-          <ChkGrid cols={3} flags={flags} toggle={toggle} items={DELIVERY_CHECKS} />
+          <BtnGroupMulti
+            options={DELIVERY_CHECKS.map((it) => ({ value: it.key, label: it.label }))}
+            values={flags}
+            onChange={setFlags}
+          />
         </div>
       )}
 
@@ -432,7 +440,11 @@ export function IocForm() {
       {kind === '정상출고' && (
         <div className="form-section">
           <div className="form-section-title"><i className="ph ph-clipboard" />비품 확인</div>
-          <ChkGrid cols={3} flags={flags} toggle={toggle} items={DELIVERY_EQUIP} />
+          <BtnGroupMulti
+            options={DELIVERY_EQUIP.map((it) => ({ value: it.key, label: it.label }))}
+            values={flags}
+            onChange={setFlags}
+          />
         </div>
       )}
 
@@ -441,22 +453,15 @@ export function IocForm() {
         <div className="form-section">
           <div className="form-section-title"><i className="ph ph-shield-check" />보험증권 검증</div>
           <div
-            style={{
-              padding: 10,
-              background: insCertStatus === 'pass' ? 'var(--c-success-bg)'
+            className="text-xs" style={{ padding: 10, background: insCertStatus === 'pass' ? 'var(--c-success-bg)'
                 : insCertStatus === 'fail' ? 'var(--c-danger-bg)'
-                : 'var(--c-bg-sub)',
-              border: `1px solid ${
+                : 'var(--c-bg-sub)', border: `1px solid ${
                 insCertStatus === 'pass' ? 'var(--c-success)'
                 : insCertStatus === 'fail' ? 'var(--c-danger)'
                 : 'var(--c-border)'
-              }`,
-              borderRadius: 2,
-              color: insCertStatus === 'pass' ? 'var(--c-success)'
+              }`, borderRadius: 2, color: insCertStatus === 'pass' ? 'var(--c-success)'
                 : insCertStatus === 'fail' ? 'var(--c-danger)'
-                : 'var(--c-text-sub)',
-              fontSize: 11,
-            }}
+                : 'var(--c-text-sub)' }}
           >
             {insCertStatus === 'idle'
               ? '아래 첨부파일에 오늘 발급된 보험증권을 업로드 후 OCR 버튼으로 차량번호·발급일 자동 검증'
@@ -473,7 +478,7 @@ export function IocForm() {
             <Field label="과주행 추가금"><NumberInput name="extra_mileage" placeholder="0" /></Field>
             <Field label="연료부족 추가금"><NumberInput name="extra_fuel" placeholder="0" /></Field>
             <Field label="손상수리 추가금"><NumberInput name="extra_damage" placeholder="0" /></Field>
-            <Field label="다음예정" span={3}>
+            <Field label="다음예정">
               <BtnGroup value={nextPlan} onChange={setNextPlan} options={NEXT_PLANS} />
             </Field>
           </div>
@@ -486,7 +491,7 @@ export function IocForm() {
           <div className="form-section">
             <div className="form-section-title"><i className="ph ph-warning-octagon" />강제회수 정보</div>
             <div className="form-grid">
-              <Field label="회수사유" span={3}>
+              <Field label="회수사유" span={2}>
                 <BtnGroup value={forceReason} onChange={setForceReason} options={FORCE_REASONS} />
               </Field>
               <Field label="회수장소">
@@ -506,7 +511,7 @@ export function IocForm() {
               <Field label="손해배상청구">
                 <NumberInput name="damage_claim" placeholder="0" />
               </Field>
-              <Field label="법적조치" span={3}>
+              <Field label="법적조치" span={2}>
                 <BtnGroup value={legalAction} onChange={setLegalAction} options={LEGAL_ACTIONS} />
               </Field>
             </div>

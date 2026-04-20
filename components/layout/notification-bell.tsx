@@ -74,7 +74,7 @@ export function NotificationBell() {
           <div style={{ maxHeight: 360, overflowY: 'auto' }}>
             {alerts.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-10 text-text-muted text-xs">
-                <i className="ph ph-check-circle" style={{ fontSize: 32, color: 'var(--c-success)' }} />
+                <i className="ph ph-check-circle text-success" style={{ fontSize: 32 }} />
                 <div>처리할 알림이 없습니다</div>
               </div>
             ) : (
@@ -87,13 +87,9 @@ export function NotificationBell() {
                   style={{ textDecoration: 'none', borderBottom: '1px solid var(--c-border)' }}
                 >
                   <i
-                    className={`ph ${a.icon}`}
-                    style={{
-                      fontSize: 15,
-                      color: a.tone === 'danger' ? 'var(--c-danger)' : a.tone === 'warn' ? 'var(--c-warn)' : 'var(--c-primary)',
-                    }}
+                    className={`ph ${a.icon} text-[15px]`} style={{ color: a.tone === 'danger' ? 'var(--c-danger)' : a.tone === 'warn' ? 'var(--c-warn)' : 'var(--c-primary)' }}
                   />
-                  <div style={{ flex: 1, fontSize: 12 }}>{a.label}</div>
+                  <div className="text-base" style={{ flex: 1 }}>{a.label}</div>
                   <span
                     className={`badge ${a.tone === 'danger' ? 'badge-danger' : a.tone === 'warn' ? 'badge-warn' : 'badge-primary'}`}
                     style={{ fontWeight: 700 }}

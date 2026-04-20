@@ -76,22 +76,19 @@ function StateIndicator({ state }: { state: SaveState }) {
   if (state === 'saving')
     return (
       <i
-        className="ph ph-spinner absolute right-2 text-text-muted spin"
-        style={{ fontSize: 11 }}
+        className="ph ph-spinner absolute right-2 text-text-muted spin text-xs"
       />
     );
   if (state === 'saved')
     return (
       <i
-        className="ph ph-check absolute right-2 text-success"
-        style={{ fontSize: 11 }}
+        className="ph ph-check absolute right-2 text-success text-xs"
       />
     );
   if (state === 'error')
     return (
       <i
-        className="ph ph-warning-circle absolute right-2 text-danger"
-        style={{ fontSize: 11 }}
+        className="ph ph-warning-circle absolute right-2 text-danger text-xs"
       />
     );
   return null;

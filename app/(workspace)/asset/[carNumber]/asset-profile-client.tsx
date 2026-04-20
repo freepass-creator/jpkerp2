@@ -235,8 +235,7 @@ export function AssetProfileClient({ carNumber }: { carNumber: string }) {
                       {fmtDate(e.date)}
                     </div>
                     <i
-                      className={`ph ${meta.icon} mt-0.5 flex-shrink-0`}
-                      style={{ color: meta.color, fontSize: 14 }}
+                      className={`ph ${meta.icon} mt-0.5 flex-shrink-0 text-[14px]`} style={{ color: meta.color }}
                     />
                     <div className="flex-1 min-w-0">
                       <div className="truncate">

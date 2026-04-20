@@ -324,10 +324,10 @@ export function CarMasterTool() {
       return !existing.has(`${s.maker}|${s.model}|${finalSub}`);
     });
     if (toAdd.length === 0) {
-      toast.info(`한국 차종 ${KOREAN_CAR_MODELS.length}종 모두 이미 등록됨`);
+      toast.info(`차종 ${KOREAN_CAR_MODELS.length}종 모두 이미 등록됨`);
       return;
     }
-    if (!confirm(`한국 차종 ${toAdd.length}종 등록 (이미 ${KOREAN_CAR_MODELS.length - toAdd.length}종 존재). 진행?`)) return;
+    if (!confirm(`차종 ${toAdd.length}종 등록 (이미 ${KOREAN_CAR_MODELS.length - toAdd.length}종 존재). 진행?`)) return;
     setBusy(true);
     const errors: string[] = [];
     try {
@@ -654,7 +654,7 @@ export function CarMasterTool() {
             <button type="button" className="btn btn-sm btn-outline" onClick={startEdit}>
               <i className="ph ph-pencil" />수정
             </button>
-            <button type="button" className="btn btn-sm btn-outline" onClick={remove} disabled={busy} style={{ color: 'var(--c-danger)' }}>
+            <button type="button" className="btn btn-sm btn-outline text-danger" onClick={remove} disabled={busy}>
               <i className={`ph ${busy ? 'ph-spinner spin' : 'ph-trash'}`} />삭제
             </button>
           </>
@@ -672,11 +672,11 @@ export function CarMasterTool() {
         )}
         {mode === 'idle' && (
           <>
-            <button type="button" className="btn btn-sm btn-outline" onClick={deleteAll} disabled={busy} style={{ color: 'var(--c-danger)' }} title="vehicle_master 전체 soft-delete (개발용)">
+            <button type="button" className="btn btn-sm btn-outline text-danger" onClick={deleteAll} disabled={busy} title="vehicle_master 전체 soft-delete (개발용)">
               <i className={`ph ${busy ? 'ph-spinner spin' : 'ph-trash'}`} />전체 삭제
             </button>
-            <button type="button" className="btn btn-sm btn-outline" onClick={seedKorean} disabled={busy} title={`한국 시장 표준 차종 ${KOREAN_CAR_MODELS.length}종 일괄 등록 (스펙 포함)`}>
-              <i className={`ph ${busy ? 'ph-spinner spin' : 'ph-flag'}`} />한국 차종 시드
+            <button type="button" className="btn btn-sm btn-outline" onClick={seedKorean} disabled={busy} title={`차종 시드 ${KOREAN_CAR_MODELS.length}종 일괄 등록 (국산+수입 스펙 포함)`}>
+              <i className={`ph ${busy ? 'ph-spinner spin' : 'ph-flag'}`} />차종 시드
             </button>
             <button type="button" className="btn btn-sm btn-outline" onClick={startPrep}>
               <i className="ph ph-table" />데이터 준비
@@ -708,13 +708,13 @@ export function CarMasterTool() {
         <PrepTable rows={prepRows} setRows={setPrepRows} fpMasterError={fpModels.error} fpProductsCount={fpProducts.data.length} />
       ) : (
         <div className="flex flex-col" style={{ height: '100%' }}>
-          <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--c-border)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="text-base" style={{ padding: '8px 14px', borderBottom: '1px solid var(--c-border)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <i className="ph ph-car" />
             <b>{fmt(rows.length)}</b>
             <span className="text-text-muted">종</span>
-            <span className="text-text-muted" style={{ fontSize: 10, fontFamily: 'monospace' }}>· vehicle_master</span>
+            <span className="text-text-muted text-2xs" style={{ fontFamily: 'monospace' }}>· vehicle_master</span>
             {rows.length === 0 && !models.loading && (
-              <span className="text-text-muted" style={{ marginLeft: 'auto', fontSize: 11 }}>
+              <span className="text-text-muted text-xs" style={{ marginLeft: 'auto' }}>
                 "데이터 준비" 또는 "+ 차종 추가"로 시작
               </span>
             )}
@@ -734,13 +734,13 @@ export function CarMasterTool() {
       <ToolDetail active={mode !== 'idle' && mode !== 'prep'}>
         {mode === 'view' && selected && (
           <div style={{ padding: 16, overflow: 'auto', flex: 1 }}>
-            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>
-              {selected.maker} <span style={{ color: 'var(--c-text-sub)', fontWeight: 500 }}>{selected.model}</span>
+            <div className="text-[18px]" style={{ fontWeight: 700, marginBottom: 4 }}>
+              {selected.maker} <span className="text-text-sub" style={{ fontWeight: 500 }}>{selected.model}</span>
             </div>
-            <div style={{ fontSize: 13, color: 'var(--c-text-sub)', marginBottom: 14 }}>
+            <div className="text-xl text-text-sub" style={{ marginBottom: 14 }}>
               {selected.sub}
             </div>
-            <dl style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 14px', fontSize: 12, margin: 0 }}>
+            <dl className="text-base" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 14px', margin: 0 }}>
               <KV k="구분" v={<b style={{ color: selected.origin === '수입' ? 'var(--c-primary)' : 'var(--c-text)' }}>{selected.origin ?? '—'}</b>} />
               <KV k="동력" v={<b style={{ color: selected.powertrain === '전기' ? 'var(--c-success)' : selected.powertrain === '수소' ? 'var(--c-primary)' : selected.powertrain === '하이브리드' ? 'var(--c-warn)' : 'var(--c-text)' }}>{selected.powertrain ?? '—'}</b>} />
               <KV k="코드" v={selected.code} />
@@ -759,7 +759,7 @@ export function CarMasterTool() {
 
         {editable && (
           <div style={{ padding: 16, overflow: 'auto', flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>
+            <div className="text-xl" style={{ fontWeight: 600, marginBottom: 14 }}>
               <i className={`ph ${mode === 'edit' ? 'ph-pencil' : 'ph-plus-circle'}`} style={{ marginRight: 4 }} />
               {mode === 'edit' ? '차종 수정' : '새 차종 추가'}
             </div>
@@ -775,7 +775,7 @@ export function CarMasterTool() {
               </FieldRow>
 
               <details style={{ marginTop: 4 }}>
-                <summary style={{ cursor: 'pointer', fontSize: 11, color: 'var(--c-text-muted)', padding: '4px 0' }}>
+                <summary className="text-xs text-text-muted" style={{ cursor: 'pointer', padding: '4px 0' }}>
                   추가 정보 (선택)
                 </summary>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginTop: 8 }}>
@@ -820,7 +820,7 @@ export function CarMasterTool() {
               </details>
 
               <details open style={{ marginTop: 4 }}>
-                <summary style={{ cursor: 'pointer', fontSize: 11, color: 'var(--c-text-muted)', padding: '4px 0' }}>
+                <summary className="text-xs text-text-muted" style={{ cursor: 'pointer', padding: '4px 0' }}>
                   스펙 (자산 등록 시 드랍다운으로 사용)
                 </summary>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginTop: 8 }}>
@@ -851,8 +851,8 @@ export function CarMasterTool() {
 function KV({ k, v }: { k: string; v: React.ReactNode }) {
   return (
     <>
-      <dt style={{ color: 'var(--c-text-muted)', whiteSpace: 'nowrap' }}>{k}</dt>
-      <dd style={{ margin: 0, color: 'var(--c-text)' }}>{v || '—'}</dd>
+      <dt className="text-text-muted" style={{ whiteSpace: 'nowrap' }}>{k}</dt>
+      <dd className="text-text" style={{ margin: 0 }}>{v || '—'}</dd>
     </>
   );
 }
@@ -887,28 +887,28 @@ function PrepTable({
 
   return (
     <div className="flex flex-col" style={{ height: '100%' }}>
-      <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--c-border)', fontSize: 12, background: 'var(--c-bg-sub)', display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+      <div className="text-base" style={{ padding: '8px 14px', borderBottom: '1px solid var(--c-border)', background: 'var(--c-bg-sub)', display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
         <i className="ph ph-table" />
         <b>{rows.length}</b>
         <span className="text-text-muted">종 대조 ·</span>
-        <span title="jpkerp 자산에 존재"><b style={{ color: 'var(--c-warn)' }}>J</b> {jCount}</span>
+        <span title="jpkerp 자산에 존재"><b className="text-warn">J</b> {jCount}</span>
         <span className="text-text-muted">·</span>
-        <span title="freepass(상품+마스터)에 존재"><b style={{ color: 'var(--c-primary)' }}>F</b> {fCount}</span>
+        <span title="freepass(상품+마스터)에 존재"><b className="text-primary">F</b> {fCount}</span>
         <span className="text-text-muted">·</span>
-        <span title="양쪽 모두"><b style={{ color: 'var(--c-success)' }}>JF</b> {bothCount}</span>
+        <span title="양쪽 모두"><b className="text-success">JF</b> {bothCount}</span>
         <span className="text-text-muted">·</span>
-        <span style={{ color: 'var(--c-text-muted)' }}>이미등록 {alreadyIn}</span>
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--c-primary)', fontWeight: 600 }}>
+        <span className="text-text-muted">이미등록 {alreadyIn}</span>
+        <span className="text-xs text-primary" style={{ marginLeft: 'auto', fontWeight: 600 }}>
           등록 대상: {toAdd}건
         </span>
         {fpMasterError && (
-          <span style={{ color: 'var(--c-warn)', fontSize: 11, width: '100%' }}>
+          <span className="text-warn text-xs" style={{ width: '100%' }}>
             <i className="ph ph-warning" /> freepass vehicle_master 읽기 실패 ({fpMasterError.message}) · /products는 읽기 OK (총 {fpProductsCount}건 참조)
           </span>
         )}
       </div>
 
-      <div style={{ padding: '6px 14px', borderBottom: '1px solid var(--c-border)', fontSize: 11, display: 'flex', gap: 10 }}>
+      <div className="text-xs" style={{ padding: '6px 14px', borderBottom: '1px solid var(--c-border)', display: 'flex', gap: 10 }}>
         <button type="button" className="btn btn-sm btn-ghost" onClick={() => toggleAll(true)} style={{ padding: '0 8px' }}>
           전체 선택
         </button>
@@ -918,11 +918,11 @@ function PrepTable({
       </div>
 
       <div className="flex-1 min-h-0" style={{ overflow: 'auto' }}>
-        <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+        <table className="text-base" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead style={{ position: 'sticky', top: 0, background: 'var(--c-surface)', borderBottom: '1px solid var(--c-border)' }}>
             <tr>
               <th style={{ width: 32, padding: 6, textAlign: 'center' }}></th>
-              <th style={{ width: 140, padding: 6, textAlign: 'left', color: 'var(--c-text-muted)', fontWeight: 500 }}>출처</th>
+              <th className="text-text-muted" style={{ width: 140, padding: 6, textAlign: 'left', fontWeight: 500 }}>출처</th>
               <th style={{ padding: 6, textAlign: 'left', fontWeight: 500 }}>제조사</th>
               <th style={{ padding: 6, textAlign: 'left', fontWeight: 500 }}>모델</th>
               <th style={{ padding: 6, textAlign: 'left', fontWeight: 500 }}>세부모델</th>
@@ -941,16 +941,16 @@ function PrepTable({
                     onChange={() => toggleOne(r.id)}
                   />
                 </td>
-                <td style={{ padding: 4, fontSize: 10 }}>
+                <td className="text-2xs" style={{ padding: 4 }}>
                   {r.in_jpkerp ? (
-                    <span style={{ color: 'var(--c-text-muted)' }}>등록됨</span>
+                    <span className="text-text-muted">등록됨</span>
                   ) : (() => {
                     const inJ = r.asset_count > 0;
                     const inF = r.fp_product_count > 0 || r.in_fp_master;
                     const bg = 'var(--c-bg-sub)';
-                    if (inJ && inF) return <span style={{ color: 'var(--c-success)', background: bg, padding: '1px 6px', borderRadius: 2, fontWeight: 600 }} title="jpkerp 자산 + freepass 양쪽">JF</span>;
-                    if (inJ) return <span style={{ color: 'var(--c-warn)', background: bg, padding: '1px 6px', borderRadius: 2, fontWeight: 600 }} title="jpkerp에만 존재">J</span>;
-                    if (inF) return <span style={{ color: 'var(--c-primary)', background: bg, padding: '1px 6px', borderRadius: 2, fontWeight: 600 }} title="freepass에만 존재">F</span>;
+                    if (inJ && inF) return <span className="text-success" style={{ background: bg, padding: '1px 6px', borderRadius: 2, fontWeight: 600 }} title="jpkerp 자산 + freepass 양쪽">JF</span>;
+                    if (inJ) return <span className="text-warn" style={{ background: bg, padding: '1px 6px', borderRadius: 2, fontWeight: 600 }} title="jpkerp에만 존재">J</span>;
+                    if (inF) return <span className="text-primary" style={{ background: bg, padding: '1px 6px', borderRadius: 2, fontWeight: 600 }} title="freepass에만 존재">F</span>;
                     return null;
                   })()}
                 </td>
@@ -960,7 +960,7 @@ function PrepTable({
                     value={r.maker}
                     onChange={(e) => updateField(r.id, 'maker', e.target.value)}
                     disabled={r.in_jpkerp}
-                    style={{ width: '100%', padding: '2px 4px', fontSize: 12, border: 'none', background: 'transparent' }}
+                    className="text-base" style={{ width: '100%', padding: '2px 4px', border: 'none', background: 'transparent' }}
                   />
                 </td>
                 <td style={{ padding: 2 }}>
@@ -969,7 +969,7 @@ function PrepTable({
                     value={r.model}
                     onChange={(e) => updateField(r.id, 'model', e.target.value)}
                     disabled={r.in_jpkerp}
-                    style={{ width: '100%', padding: '2px 4px', fontSize: 12, border: 'none', background: 'transparent' }}
+                    className="text-base" style={{ width: '100%', padding: '2px 4px', border: 'none', background: 'transparent' }}
                   />
                 </td>
                 <td style={{ padding: 2 }}>
@@ -978,7 +978,7 @@ function PrepTable({
                     value={r.sub}
                     onChange={(e) => updateField(r.id, 'sub', e.target.value)}
                     disabled={r.in_jpkerp}
-                    style={{ width: '100%', padding: '2px 4px', fontSize: 12, border: 'none', background: 'transparent' }}
+                    className="text-base" style={{ width: '100%', padding: '2px 4px', border: 'none', background: 'transparent' }}
                   />
                 </td>
                 <td style={{ padding: 6, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: r.asset_count > 0 ? 'var(--c-primary)' : 'var(--c-text-muted)' }}>
@@ -999,7 +999,7 @@ function PrepTable({
 function FieldRow({ label, children, span }: { label: string; children: React.ReactNode; span?: number }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 3, gridColumn: span ? `span ${span}` : undefined }}>
-      <label style={{ fontSize: 10, color: 'var(--c-text-muted)' }}>{label}</label>
+      <label className="text-2xs text-text-muted">{label}</label>
       {children}
     </div>
   );

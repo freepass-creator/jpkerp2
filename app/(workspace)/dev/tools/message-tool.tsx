@@ -63,10 +63,10 @@ export function MessageTool({ channel }: { channel: 'alimtalk' | 'sms' }) {
 
   return (
     <div className="flex flex-col" style={{ height: '100%' }}>
-      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--c-border)', fontSize: 12 }}>
+      <div className="text-base" style={{ padding: '10px 14px', borderBottom: '1px solid var(--c-border)' }}>
         <i className={`ph ${channel === 'alimtalk' ? 'ph-chat-text' : 'ph-envelope'}`} style={{ marginRight: 4 }} />
         {label} 발송 이력 · <b>{fmt(rows.length)}</b>건
-        <span className="text-text-muted" style={{ marginLeft: 8, fontSize: 11 }}>
+        <span className="text-text-muted text-xs" style={{ marginLeft: 8 }}>
           · contact 이벤트 중 채널 매칭 (Aligo 실연동 후 별도 로그 예정)
         </span>
       </div>

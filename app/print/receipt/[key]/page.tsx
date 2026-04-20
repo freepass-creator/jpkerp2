@@ -68,7 +68,7 @@ export default function ReceiptPrintPage() {
         <tbody>
           <tr><th>청구일</th><td>{fmtDate(billing.due_date)}</td></tr>
           <tr><th>청구금액</th><td>{fmt(due)}원</td></tr>
-          <tr><th>수납금액</th><td style={{ color: 'var(--c-success)', fontWeight: 600 }}>{fmt(paid)}원</td></tr>
+          <tr><th>수납금액</th><td className="text-success" style={{ fontWeight: 600 }}>{fmt(paid)}원</td></tr>
           <tr>
             <th>잔액</th>
             <td style={{ color: unpaid > 0 ? 'var(--c-danger)' : 'var(--c-text-muted)', fontWeight: 600 }}>
@@ -79,7 +79,7 @@ export default function ReceiptPrintPage() {
         </tbody>
       </table>
 
-      <div style={{ marginTop: 40, textAlign: 'center', fontSize: 13 }}>
+      <div className="text-xl" style={{ marginTop: 40, textAlign: 'center' }}>
         위와 같이 영수하였음을 확인합니다.
       </div>
 

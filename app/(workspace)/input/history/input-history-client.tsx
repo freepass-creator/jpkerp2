@@ -95,8 +95,7 @@ export function InputHistoryClient({ onSelect, gridRef, onCountChange }: Props) 
         <select
           value={filterType}
           onChange={(e) => setFilterType(e.target.value)}
-          className="ctrl"
-          style={{ width: 110, height: 28, fontSize: 12 }}
+          className="ctrl text-base" style={{ width: 110, height: 28 }}
         >
           <option value="">전체 종류</option>
           <option value="asset">자산</option>
@@ -114,17 +113,15 @@ export function InputHistoryClient({ onSelect, gridRef, onCountChange }: Props) 
           type="date"
           value={dateFrom}
           onChange={(e) => setDateFrom(e.target.value)}
-          className="ctrl"
-          style={{ width: 130, height: 28, fontSize: 12 }}
+          className="ctrl text-base" style={{ width: 130, height: 28 }}
           placeholder="시작일"
         />
-        <span style={{ color: 'var(--c-text-muted)' }}>~</span>
+        <span className="text-text-muted">~</span>
         <input
           type="date"
           value={dateTo}
           onChange={(e) => setDateTo(e.target.value)}
-          className="ctrl"
-          style={{ width: 130, height: 28, fontSize: 12 }}
+          className="ctrl text-base" style={{ width: 130, height: 28 }}
           placeholder="종료일"
         />
         <span className="ml-auto text-xs text-text-muted num">{filtered.length}건</span>

@@ -7,9 +7,11 @@ import type { CarOrigin, Powertrain, DriveType } from '@/lib/data/vehicle-consta
 export type RtdbBase = { _key?: string; [k: string]: unknown };
 
 export type RtdbAsset = RtdbBase & {
+  asset_code?: string;        // 자산 고유코드
   car_number?: string;
   vin?: string;
   partner_code?: string;
+  customer_code?: string;     // 현재 사용 고객
   manufacturer?: string;
   car_model?: string;
   detail_model?: string;
@@ -49,8 +51,24 @@ export type RtdbAsset = RtdbBase & {
   disposed_at?: number;
 };
 
+export type RtdbCustomer = RtdbBase & {
+  customer_code?: string;
+  partner_code?: string;
+  name?: string;
+  phone?: string;
+  birth?: string;
+  address?: string;
+  license_no?: string;
+  biz_no?: string;            // 법인/사업자번호
+  customer_type?: string;     // 개인/법인/개인사업자
+  note?: string;
+  status?: string;
+  created_at?: number;
+};
+
 export type RtdbContract = RtdbBase & {
   contract_code?: string;
+  customer_code?: string;     // 고객코드 — 고객 엔티티 연결
   partner_code?: string;
   car_number?: string;
   contractor_name?: string;
@@ -64,7 +82,7 @@ export type RtdbContract = RtdbBase & {
   auto_debit_day?: string | number;
   note?: string;
   contract_status?: string;
-  action_status?: string; // 시동제어
+  action_status?: string;     // 시동제어
   status?: string;
   created_at?: number;
   updated_at?: number | object;
@@ -72,6 +90,9 @@ export type RtdbContract = RtdbBase & {
 
 export type RtdbBilling = RtdbBase & {
   contract_code?: string;
+  customer_code?: string;     // 역정규화 — 고객 직접 조회용
+  car_number?: string;        // 역정규화 — 차량별 청구 조회용
+  partner_code?: string;      // 역정규화 — 회원사별 조회용
   bill_count?: number;
   due_date?: string;
   amount?: number;
@@ -104,6 +125,8 @@ export type RtdbCarModel = RtdbBase & {
 };
 
 export type RtdbGpsDevice = RtdbBase & {
+  gps_code?: string;          // GPS 고유코드
+  asset_code?: string;        // 자산 연결
   car_number?: string;
   partner_code?: string;
   gps_status?: string;        // 장착/해제/고장/점검중
@@ -119,12 +142,17 @@ export type RtdbGpsDevice = RtdbBase & {
 };
 
 export type RtdbEvent = RtdbBase & {
+  event_code?: string;        // 이벤트 고유코드
   type?: string;
   date?: string;
   title?: string;
   amount?: number;
   car_number?: string;
+  asset_code?: string;        // 자산 연결
   contract_code?: string;
+  customer_code?: string;
+  partner_code?: string;
+  insurance_code?: string;    // 보험 이벤트 시 보험코드
   memo?: string;
   vendor?: string;
   to_location?: string;

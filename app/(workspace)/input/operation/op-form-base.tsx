@@ -14,7 +14,7 @@ import { CarNumberPicker } from '@/components/form/car-number-picker';
 import { PhotoUploader, type PhotoUploaderHandle } from '@/components/form/photo-uploader';
 import { useOpContext } from './op-context-store';
 import { computeContractEnd, computeTotalDue, daysBetween, shortDate, today } from '@/lib/date-utils';
-import { useSaveStore } from '@/lib/hooks/useSaveStatus';
+import { useFormSave } from '@/lib/hooks/useFormSave';
 import type { RtdbBilling, RtdbEvent } from '@/lib/types/rtdb-entities';
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -68,6 +68,12 @@ export function OpFormBase({
   const { carNumber, date, setCarNumber, setDate } = useOpContext();
   const formRef = useRef<HTMLFormElement | null>(null);
   const uploaderRef = useRef<PhotoUploaderHandle | null>(null);
+  const { run } = useFormSave({
+    formRef,
+    onSaved,
+    onCleanup: () => uploaderRef.current?.clear(),
+    failPrefix: '저장 실패',
+  });
   // 상품등록된 차량 (product_register 이벤트 있음) — vehicle state 표시용
   const productCarNumbers = useMemo(() => {
     const set = new Set<string>();
@@ -159,9 +165,8 @@ export function OpFormBase({
       toast.error('차량번호를 입력하세요');
       return;
     }
-    const saveStore = useSaveStore.getState();
-    saveStore.begin('등록 중');
-    try {
+
+    await run(async () => {
       const fd = new FormData(e.currentTarget);
       const data: Record<string, string> = {};
       fd.forEach((v, k) => { data[k] = String(v ?? ''); });
@@ -177,7 +182,9 @@ export function OpFormBase({
         type: eventType,
         date,
         car_number: carNumber,
+        asset_code: matchedAsset?.asset_code,
         contract_code: matchedContract?.contract_code,
+        customer_code: matchedContract?.customer_code,
         partner_code: matchedAsset?.partner_code ?? matchedContract?.partner_code,
         customer_name: matchedContract?.contractor_name,
         customer_phone: matchedContract?.contractor_phone,
@@ -193,15 +200,7 @@ export function OpFormBase({
       }
 
       recent.push(carNumber);
-      saveStore.success('등록 완료');
-      toast.success('등록 완료');
-      formRef.current?.reset();
-      uploaderRef.current?.clear();
-      onSaved?.();
-    } catch (err) {
-      saveStore.fail((err as Error).message || '저장 실패');
-      toast.error(`저장 실패: ${(err as Error).message}`);
-    }
+    });
   }
 
   const hasData = !!carNumber && !!matchedAsset;
@@ -214,7 +213,7 @@ export function OpFormBase({
   const vehicleRow = !hasData ? (
     <div className="ioc-car-info is-empty">
       <div className="ioc-car-line">
-        <i className="ph ph-identification-card" style={{ color: 'var(--c-text-muted)' }} />
+        <i className="ph ph-identification-card text-text-muted" />
         <span className="ioc-car-muted">차량번호 입력 시 차량 스펙 · 현재 상태 · 계약 정보가 여기 표시됩니다</span>
       </div>
       <div className="ioc-car-line ioc-car-line-sub">
@@ -235,9 +234,9 @@ export function OpFormBase({
         {currentLocation && (
           <>
             <span className="ioc-car-dot">·</span>
-            <i className="ph ph-map-pin" style={{ fontSize: 12, color: 'var(--c-text-muted)' }} />
+            <i className="ph ph-map-pin text-base text-text-muted" />
             <span className="ioc-car-strong">{currentLocation.loc}</span>
-            <span className="ioc-car-muted" style={{ fontSize: 10 }}>
+            <span className="ioc-car-muted text-2xs">
               {currentLocation.date}
               {currentLocation.type && ` · ${LOCATION_TYPE_LABEL[currentLocation.type] ?? currentLocation.type}`}
             </span>
@@ -263,7 +262,7 @@ export function OpFormBase({
           {!!unpaidStatus?.unpaidCount && (
             <>
               <span className="ioc-car-dot">·</span>
-              <span style={{ color: 'var(--c-danger)', fontWeight: 600 }}>
+              <span className="text-danger" style={{ fontWeight: 600 }}>
                 미납 {unpaidStatus.unpaidAmount.toLocaleString()}원
                 <span className="text-text-muted" style={{ fontWeight: 400, marginLeft: 4 }}>({unpaidStatus.unpaidCount}회)</span>
               </span>
@@ -275,12 +274,7 @@ export function OpFormBase({
               <span className="ioc-car-muted">{contractPeriod}</span>
               {contractPeriodSuffix && (
                 <span
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 600,
-                    marginLeft: 4,
-                    color: contractPeriodSuffix.tone === 'danger' ? 'var(--c-danger)' : 'var(--c-warn)',
-                  }}
+                  className="text-2xs" style={{ fontWeight: 600, marginLeft: 4, color: contractPeriodSuffix.tone === 'danger' ? 'var(--c-danger)' : 'var(--c-warn)' }}
                 >
                   {contractPeriodSuffix.text}
                 </span>
@@ -313,7 +307,7 @@ export function OpFormBase({
           {/* 최근 차량 클릭 버튼 */}
           {recent.list.length > 0 && (
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 10 }}>
-              <span className="text-text-muted" style={{ fontSize: 10, alignSelf: 'center' }}>
+              <span className="text-text-muted text-2xs" style={{ alignSelf: 'center' }}>
                 최근
               </span>
               {recent.list.map((c) => (
@@ -321,19 +315,7 @@ export function OpFormBase({
                   key={c}
                   type="button"
                   onClick={() => setCarNumber(c)}
-                  style={{
-                    height: 22,
-                    padding: '0 8px',
-                    fontSize: 11,
-                    border: carNumber === c ? '1px solid var(--c-primary)' : '1px solid var(--c-border)',
-                    borderRadius: 2,
-                    background: carNumber === c ? 'var(--c-primary-bg)' : 'var(--c-surface)',
-                    color: carNumber === c ? 'var(--c-primary)' : 'var(--c-text-sub)',
-                    fontWeight: carNumber === c ? 600 : 500,
-                    cursor: 'pointer',
-                    fontFamily: 'inherit',
-                    letterSpacing: '-0.02em',
-                  }}
+                  className="text-xs" style={{ height: 22, padding: '0 8px', border: carNumber === c ? '1px solid var(--c-primary)' : '1px solid var(--c-border)', borderRadius: 2, background: carNumber === c ? 'var(--c-primary-bg)' : 'var(--c-surface)', color: carNumber === c ? 'var(--c-primary)' : 'var(--c-text-sub)', fontWeight: carNumber === c ? 600 : 500, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '-0.02em' }}
                 >
                   {c}
                 </button>
@@ -376,7 +358,7 @@ export function OpFormBase({
             <div className="form-section-title">
               <i className="ph ph-paperclip" />첨부파일
               {onOcrExtract && (
-                <span className="text-text-muted" style={{ marginLeft: 8, fontSize: 10, fontWeight: 500 }}>
+                <span className="text-text-muted text-2xs" style={{ marginLeft: 8, fontWeight: 500 }}>
                   · 업로드 후 OCR 버튼으로 금액·날짜·차량번호 자동 채움
                 </span>
               )}

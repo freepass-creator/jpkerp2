@@ -75,7 +75,7 @@ export function ProductRegisterForm() {
       </div>
 
       <div className="form-grid">
-        <Field label="상품 구분" required span={3}>
+        <Field label="상품 구분" required span={2}>
           <BtnGroup value={productType} onChange={setProductType} options={PRODUCT_TYPES} />
         </Field>
         <Field label="차량가격">
@@ -102,7 +102,7 @@ export function ProductRegisterForm() {
         <i className="ph ph-note" />추가 정보
       </div>
       <div className="form-grid">
-        <Field label="메모" span={3}>
+        <Field label="메모" span={2}>
           <TextArea name="memo" rows={3} placeholder="특이사항·옵션" />
         </Field>
       </div>

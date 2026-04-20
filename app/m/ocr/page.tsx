@@ -144,15 +144,15 @@ export default function MobileOcr() {
           <img src={image} alt="촬영 결과" style={{ maxWidth: '100%', maxHeight: 260, borderRadius: 2 }} />
         ) : (
           <>
-            <i className="ph ph-camera" style={{ fontSize: 40, color: 'var(--c-text-muted)' }} />
-            <div style={{ fontSize: 13, fontWeight: 500 }}>사진 촬영 또는 선택</div>
-            <div style={{ fontSize: 11, color: 'var(--c-text-muted)' }}>카메라가 열리거나 갤러리 선택</div>
+            <i className="ph ph-camera text-text-muted" style={{ fontSize: 40 }} />
+            <div className="text-xl" style={{ fontWeight: 500 }}>사진 촬영 또는 선택</div>
+            <div className="text-xs text-text-muted">카메라가 열리거나 갤러리 선택</div>
           </>
         )}
       </label>
 
       {busy && (
-        <div style={{ textAlign: 'center', padding: 12, color: 'var(--c-primary)' }}>
+        <div className="text-primary" style={{ textAlign: 'center', padding: 12 }}>
           <i className="ph ph-spinner spin" /> 인식 중...
         </div>
       )}
@@ -160,17 +160,17 @@ export default function MobileOcr() {
       {/* 추출 결과 편집 */}
       {extracted && !busy && (
         <div className="m-card" style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>인식 결과 — 수정 후 저장</div>
+          <div className="text-base" style={{ fontWeight: 600, marginBottom: 8 }}>인식 결과 — 수정 후 저장</div>
           <div style={{ display: 'grid', gap: 8 }}>
             <label>
-              <div style={{ fontSize: 11, color: 'var(--c-text-muted)', marginBottom: 2 }}>차량번호</div>
+              <div className="text-xs text-text-muted" style={{ marginBottom: 2 }}>차량번호</div>
               <CarNumberPicker
                 value={extracted.car_number ?? ''}
                 onChange={(v) => setExtracted({ ...extracted, car_number: v })}
               />
             </label>
             <label>
-              <div style={{ fontSize: 11, color: 'var(--c-text-muted)', marginBottom: 2 }}>일자</div>
+              <div className="text-xs text-text-muted" style={{ marginBottom: 2 }}>일자</div>
               <input
                 className="m-input"
                 type="date"
@@ -180,7 +180,7 @@ export default function MobileOcr() {
             </label>
             {kind === 'penalty' && (
               <label>
-                <div style={{ fontSize: 11, color: 'var(--c-text-muted)', marginBottom: 2 }}>금액</div>
+                <div className="text-xs text-text-muted" style={{ marginBottom: 2 }}>금액</div>
                 <input
                   className="m-input"
                   type="text"
@@ -192,7 +192,7 @@ export default function MobileOcr() {
             )}
             {(kind === 'license' || kind === 'insurance') && (
               <label>
-                <div style={{ fontSize: 11, color: 'var(--c-text-muted)', marginBottom: 2 }}>성명</div>
+                <div className="text-xs text-text-muted" style={{ marginBottom: 2 }}>성명</div>
                 <input
                   className="m-input"
                   value={extracted.name ?? ''}
@@ -201,7 +201,7 @@ export default function MobileOcr() {
               </label>
             )}
             <label>
-              <div style={{ fontSize: 11, color: 'var(--c-text-muted)', marginBottom: 2 }}>메모 (선택)</div>
+              <div className="text-xs text-text-muted" style={{ marginBottom: 2 }}>메모 (선택)</div>
               <input
                 className="m-input"
                 value={notes}

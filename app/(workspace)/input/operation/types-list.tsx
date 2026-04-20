@@ -10,7 +10,7 @@ const DEFAULT_TYPES: TypeItem<OpKey>[] = [
   { key: 'contact',          label: '고객센터',       icon: 'ph-phone' },
   { key: 'accident',         label: '사고접수',       icon: 'ph-car-profile' },
   { key: 'ignition',         label: '시동제어',       icon: 'ph-engine' },
-  { key: 'insurance',        label: '보험배서관리',   icon: 'ph-shield-check' },
+  { key: 'insurance',        label: '보험관리',       icon: 'ph-shield-check' },
   { key: 'product_register', label: '상품등록',       icon: 'ph-storefront' },
   { key: 'penalty_notice',   label: '과태료작업',     icon: 'ph-receipt' },
   { key: 'disposal',         label: '자산처분',       icon: 'ph-archive-box' },

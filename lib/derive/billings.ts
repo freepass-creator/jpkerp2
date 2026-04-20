@@ -7,6 +7,7 @@
  */
 import { ref, push, set, serverTimestamp, get, query, orderByChild, equalTo } from 'firebase/database';
 import { getRtdb } from '@/lib/firebase/rtdb';
+import { genBillingCode } from '@/lib/code-gen';
 import type { RtdbContract } from '@/lib/types/rtdb-entities';
 
 function pad(n: number) { return String(n).padStart(2, '0'); }
@@ -71,7 +72,9 @@ export async function deriveBillingsFromContract(contract: RtdbContract): Promis
     const dueDate = i === 0 ? first : addMonths(first, i);
     const r = push(ref(db, 'billings'));
     await set(r, {
+      billing_code: genBillingCode(),
       contract_code: code,
+      customer_code: contract.customer_code,
       car_number: contract.car_number,
       partner_code: contract.partner_code,
       bill_count: i + 1,
@@ -129,7 +132,9 @@ export async function deriveBillingsFromReturnExtras(params: {
     const r = push(ref(db, 'billings'));
     maxBillCount += 1;
     await set(r, {
+      billing_code: genBillingCode(),
       contract_code: code,
+      customer_code: contract.customer_code,
       car_number: contract.car_number,
       partner_code: contract.partner_code,
       bill_count: maxBillCount,

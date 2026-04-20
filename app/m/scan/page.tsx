@@ -76,14 +76,14 @@ export default function MobileScan() {
         <div style={{ marginTop: 16 }}>
           <div className="m-card" style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 6 }}>
-              <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>
+              <span className="text-[18px]" style={{ fontWeight: 700, letterSpacing: '-0.02em' }}>
                 {matched.asset.car_number}
               </span>
               {matched.asset.partner_code && (
-                <span className="text-text-sub" style={{ fontSize: 12 }}>{matched.asset.partner_code}</span>
+                <span className="text-text-sub text-base">{matched.asset.partner_code}</span>
               )}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--c-text-sub)' }}>
+            <div className="text-base text-text-sub">
               {[matched.asset.manufacturer, matched.asset.detail_model ?? matched.asset.car_model, matched.asset.car_year]
                 .filter(Boolean).join(' ')}
             </div>
@@ -91,15 +91,15 @@ export default function MobileScan() {
 
           {matched.contract ? (
             <div className="m-card" style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{matched.contract.contractor_name}</div>
-              <div style={{ fontSize: 12, color: 'var(--c-text-sub)', marginTop: 2 }}>
+              <div className="text-xl" style={{ fontWeight: 600 }}>{matched.contract.contractor_name}</div>
+              <div className="text-base text-text-sub" style={{ marginTop: 2 }}>
                 {matched.contract.contractor_phone && (
-                  <a href={`tel:${matched.contract.contractor_phone}`} style={{ color: 'var(--c-primary)', textDecoration: 'none' }}>
+                  <a href={`tel:${matched.contract.contractor_phone}`} className="text-primary" style={{ textDecoration: 'none' }}>
                     📞 {matched.contract.contractor_phone}
                   </a>
                 )}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--c-text-muted)', marginTop: 6 }}>
+              <div className="text-xs text-text-muted" style={{ marginTop: 6 }}>
                 {fmtDate(matched.contract.start_date)} ~ {fmtDate(matched.end)}
                 {matched.contract.rent_months && ` · ${matched.contract.rent_months}개월`}
                 {matched.dDay !== null && matched.dDay <= 30 && (
@@ -109,20 +109,20 @@ export default function MobileScan() {
                 )}
               </div>
               {matched.unpaidCount > 0 && (
-                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--c-danger)', fontWeight: 600 }}>
+                <div className="text-base text-danger" style={{ marginTop: 8, fontWeight: 600 }}>
                   미납 {fmt(matched.unpaidAmt)}원 ({matched.unpaidCount}회)
                 </div>
               )}
             </div>
           ) : (
-            <div className="m-card" style={{ marginBottom: 12, color: 'var(--c-warn)' }}>
+            <div className="m-card text-warn" style={{ marginBottom: 12 }}>
               활성 계약 없음 (휴차)
             </div>
           )}
 
           <div className="m-section-title">최근 이력 {matched.evs.length}건</div>
           {matched.evs.length === 0 ? (
-            <div className="m-card" style={{ color: 'var(--c-text-muted)', fontSize: 11 }}>이력 없음</div>
+            <div className="m-card text-text-muted text-xs">이력 없음</div>
           ) : (
             matched.evs.map((e) => {
               const meta = metaFor(e.type ?? '');
@@ -130,7 +130,7 @@ export default function MobileScan() {
                 <div key={e._key} className="m-list-item" style={{ cursor: 'default' }}>
                   <i className={`ph ${meta.icon}`} style={{ color: meta.color }} />
                   <div className="m-list-item-body">
-                    <div className="m-list-item-label" style={{ fontSize: 12 }}>
+                    <div className="m-list-item-label text-base">
                       {e.title ?? meta.label}
                     </div>
                     <div className="m-list-item-sub">

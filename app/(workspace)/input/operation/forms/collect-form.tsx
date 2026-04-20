@@ -32,10 +32,10 @@ export function CollectForm() {
         <i className="ph ph-envelope" />미수 관리 · 독촉
       </div>
       <div className="form-grid">
-        <Field label="조치" required span={3}>
+        <Field label="조치" required span={2}>
           <BtnGroup value={action} onChange={setAction} options={ACTIONS} />
         </Field>
-        <Field label="결과" required span={3}>
+        <Field label="결과" required span={2}>
           <BtnGroup value={result} onChange={setResult} options={RESULTS} />
         </Field>
         <Field label="고객명">
@@ -56,7 +56,7 @@ export function CollectForm() {
         <Field label="제목">
           <TextInput name="title" placeholder="생략 가능" />
         </Field>
-        <Field label="상세 내용" span={3}>
+        <Field label="상세 내용" span={2}>
           <TextArea name="memo" rows={3} placeholder="통화 내용·고객 반응·다음 조치 예정" />
         </Field>
       </div>

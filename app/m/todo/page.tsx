@@ -53,12 +53,7 @@ export default function MobileTodo() {
             {it.sub && <div className="m-list-item-sub">{it.sub}</div>}
           </div>
           <div
-            style={{
-              fontSize: 15,
-              fontWeight: 700,
-              color: it.count > 0 ? 'var(--c-text)' : 'var(--c-text-muted)',
-              fontVariantNumeric: 'tabular-nums',
-            }}
+            className="text-[15px]" style={{ fontWeight: 700, color: it.count > 0 ? 'var(--c-text)' : 'var(--c-text-muted)', fontVariantNumeric: 'tabular-nums' }}
           >
             {it.count}
           </div>

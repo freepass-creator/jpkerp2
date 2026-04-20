@@ -42,13 +42,13 @@ export function PenaltyForm() {
         <i className="ph ph-receipt" />과태료 등록
       </div>
       <div className="form-grid">
-        <Field label="위반유형" required span={3}>
+        <Field label="위반유형" required span={2}>
           <BtnGroup value={penaltyType} onChange={setPenaltyType} options={PENALTY_TYPES} />
         </Field>
-        <Field label="부담자" required span={3}>
+        <Field label="부담자" required span={2}>
           <BtnGroup value={payer} onChange={setPayer} options={PAYERS} />
         </Field>
-        <Field label="납부여부" required span={3}>
+        <Field label="납부여부" required span={2}>
           <BtnGroup value={paidState} onChange={setPaidState} options={PAID_STATES} />
         </Field>
         <Field label="위반일">
@@ -69,7 +69,7 @@ export function PenaltyForm() {
         <Field label="제목">
           <TextInput name="title" placeholder="생략 가능" />
         </Field>
-        <Field label="메모" span={3}>
+        <Field label="메모" span={2}>
           <TextArea name="memo" rows={2} />
         </Field>
       </div>

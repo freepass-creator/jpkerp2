@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import { ref, push, serverTimestamp } from 'firebase/database';
 import { getRtdb } from '@/lib/firebase/rtdb';
 import { useAuth } from '@/lib/auth/context';
-import { useSaveStore } from '@/lib/hooks/useSaveStatus';
+import { useFormSave } from '@/lib/hooks/useFormSave';
+import { generateCode, type CodePrefix } from '@/lib/code-gen';
 
 interface Props {
   /** RTDB collection path (예: 'customers', 'assets', 'contracts', 'tasks') */
@@ -23,15 +24,15 @@ interface Props {
 
 /**
  * 개별입력 공통 폼 shell — panel-head 버튼(form="inputForm")과 연결.
- * 운영업무 폼(OpFormBase)와 동일한 save flow.
+ * save flow는 useFormSave 훅과 공유 (OpFormBase와 동일 패턴).
  */
 export function InputFormShell({ collection, buildPayload, afterSave, onSaved, validate, children }: Props) {
   const { user } = useAuth();
   const formRef = useRef<HTMLFormElement | null>(null);
+  const { run } = useFormSave({ formRef, onSaved });
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const saveStore = useSaveStore.getState();
     const fd = new FormData(e.currentTarget);
     const data: Record<string, string> = {};
     fd.forEach((v, k) => { data[k] = String(v ?? ''); });
@@ -44,10 +45,27 @@ export function InputFormShell({ collection, buildPayload, afterSave, onSaved, v
       }
     }
 
-    saveStore.begin('등록 중');
-    try {
+    await run(async () => {
+      // 컬렉션별 코드 자동 부여
+      const CODE_MAP: Record<string, { field: string; prefix: CodePrefix }> = {
+        customers: { field: 'customer_code', prefix: 'CUS' },
+        assets: { field: 'asset_code', prefix: 'AST' },
+        contracts: { field: 'contract_code', prefix: 'CTR' },
+        partners: { field: 'partner_code', prefix: 'PTR' },
+        vendors: { field: 'vendor_code', prefix: 'VND' },
+        gps_devices: { field: 'gps_code', prefix: 'GPS' },
+        loans: { field: 'loan_code', prefix: 'LON' },
+        insurances: { field: 'insurance_code', prefix: 'INS' },
+      };
+      const codeSpec = CODE_MAP[collection];
+      const built = buildPayload(data);
+      const autoCode = codeSpec && !built[codeSpec.field]
+        ? { [codeSpec.field]: generateCode(codeSpec.prefix) }
+        : {};
+
       const payload = {
-        ...buildPayload(data),
+        ...built,
+        ...autoCode,
         handler_uid: user?.uid,
         handler: user?.displayName ?? user?.email ?? undefined,
         created_at: Date.now(),
@@ -59,14 +77,7 @@ export function InputFormShell({ collection, buildPayload, afterSave, onSaved, v
       const { set } = await import('firebase/database');
       await set(r, payload);
       if (afterSave) await afterSave(key, payload);
-      saveStore.success('등록 완료');
-      toast.success('등록 완료');
-      formRef.current?.reset();
-      onSaved?.();
-    } catch (err) {
-      saveStore.fail((err as Error).message || '등록 실패');
-      toast.error(`등록 실패: ${(err as Error).message}`);
-    }
+    });
   }
 
   return (
