@@ -1,4 +1,4 @@
-export type DevKey = 'rtdb' | 'carmaster' | 'bulk-delivery' | 'overdue' | 'cutover' | 'alimtalk' | 'sms';
+export type DevKey = 'rtdb' | 'carmaster' | 'bulk-delivery' | 'overdue' | 'cutover' | 'alimtalk' | 'sms' | 'data-purge';
 
 export const DEV_LABELS: Record<DevKey, string> = {
   rtdb: 'RTDB 현황',
@@ -8,6 +8,7 @@ export const DEV_LABELS: Record<DevKey, string> = {
   cutover: '미수 정산 검증',
   alimtalk: '알림톡',
   sms: 'SMS',
+  'data-purge': '데이터 삭제',
 };
 
 export const DEV_SUBS: Record<DevKey, string> = {
@@ -18,6 +19,7 @@ export const DEV_SUBS: Record<DevKey, string> = {
   cutover: 'billing ↔ event 매칭 검증',
   alimtalk: '카카오 알림톡 발송 이력',
   sms: 'SMS 발송 이력',
+  'data-purge': '마스터·이벤트 데이터 일괄 삭제',
 };
 
 export const DEV_ICONS: Record<DevKey, string> = {
@@ -28,4 +30,5 @@ export const DEV_ICONS: Record<DevKey, string> = {
   cutover: 'ph-currency-krw',
   alimtalk: 'ph-chat-text',
   sms: 'ph-envelope',
+  'data-purge': 'ph-trash',
 };
