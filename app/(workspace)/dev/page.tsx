@@ -11,6 +11,7 @@ import { BulkDeliveryTool } from './tools/bulk-delivery';
 import { OverdueTool } from './tools/overdue-tool';
 import { CutoverTool } from './tools/cutover-tool';
 import { MessageTool } from './tools/message-tool';
+import { DataPurgeTool } from './tools/data-purge-tool';
 
 const ITEMS: TypeItem<DevKey>[] = (Object.keys(DEV_LABELS) as DevKey[]).map((k) => ({
   key: k,
@@ -27,6 +28,7 @@ function ToolFor({ k }: { k: DevKey }) {
     case 'cutover': return <CutoverTool />;
     case 'alimtalk': return <MessageTool channel="alimtalk" />;
     case 'sms': return <MessageTool channel="sms" />;
+    case 'data-purge': return <DataPurgeTool />;
     default: return null;
   }
 }
@@ -139,6 +141,12 @@ function DevHelp({ k }: { k: DevKey }) {
     sms: [
       'contact 이벤트 중 channel이 "SMS/문자"인 항목 집계.',
       '실발송 구현 전 placeholder.',
+    ],
+    'data-purge': [
+      '마스터 데이터(자산·계약·고객·보험 등)와 운영 이벤트(과태료·정비·출고 등)를 선택적으로 삭제.',
+      '소프트 삭제: status=deleted 처리, 조회에서 제외되지만 복구 가능.',
+      '완전 삭제: DB에서 영구 제거, 복구 불가. 2단계 확인 필요.',
+      'admin 이상 권한 필요.',
     ],
   };
   return (
