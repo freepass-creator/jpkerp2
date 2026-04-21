@@ -5,7 +5,7 @@ import { Workspace } from '@/components/shared/panel';
 import { JpkGrid, type JpkGridApi } from '@/components/shared/jpk-grid';
 import { typedColumn } from '@/lib/grid/typed-column';
 import { toast } from 'sonner';
-import { ref as rtdbRef, push, set } from 'firebase/database';
+import { ref as rtdbRef, push, set, get, query, orderByChild, equalTo } from 'firebase/database';
 import { getRtdb } from '@/lib/firebase/rtdb';
 import { parseCsvObjects } from '@/lib/csv';
 import { ocrFile, extractCarNumber, extractAmount, extractDate } from '@/lib/ocr';
@@ -531,13 +531,40 @@ export function UploadClient() {
     if (!spec || mappedRows.length === 0) return;
     setSaving(true);
     try {
-      const base = rtdbRef(getRtdb(), spec.path);
+      const db = getRtdb();
+      const base = rtdbRef(db, spec.path);
       let ok = 0;
+      let skippedDup = 0;
       let derivedBillings = 0;
+
+      // 보험 업로드 시 기존 증권번호 조회 (중복 방지)
+      let existingPolicyKeys: Set<string> | null = null;
+      if (spec.key === 'insurance') {
+        existingPolicyKeys = new Set();
+        const snap = await get(rtdbRef(db, 'insurances'));
+        if (snap.exists()) {
+          for (const v of Object.values(snap.val() as Record<string, { car_number?: string; policy_no?: string; status?: string }>)) {
+            if (v?.status === 'deleted' || !v?.policy_no) continue;
+            existingPolicyKeys.add(`${v.car_number ?? ''}|${v.policy_no}`);
+          }
+        }
+      }
+
       for (const row of mappedRows) {
         // 필수필드 검증
         const missing = spec.schema.filter((f) => f.required && !row[f.col]).map((f) => f.label);
         if (missing.length) continue;
+
+        // 보험: 증권번호 중복 체크
+        if (existingPolicyKeys && row.policy_no) {
+          const dupKey = `${row.car_number ?? ''}|${row.policy_no}`;
+          if (existingPolicyKeys.has(dupKey)) {
+            skippedDup++;
+            continue;
+          }
+          existingPolicyKeys.add(dupKey); // 현재 배치 내 중복도 방지
+        }
+
         const payload = { ...row, created_at: Date.now(), status: 'active' };
         const r = push(base);
         await set(r, payload);
@@ -552,7 +579,9 @@ export function UploadClient() {
         }
       }
       const derivedMsg = derivedBillings > 0 ? ` · 수납스케줄 ${derivedBillings}건 자동 생성` : '';
-      toast.success(`${ok}건 저장 (${mappedRows.length - ok}건 필수필드 누락 스킵)${derivedMsg}`);
+      const dupMsg = skippedDup > 0 ? ` · 중복 ${skippedDup}건 스킵` : '';
+      const skipMsg = mappedRows.length - ok - skippedDup;
+      toast.success(`${ok}건 저장 (필수필드 누락 ${skipMsg}건${dupMsg})${derivedMsg}`);
       reset();
     } catch (e) {
       toast.error(`저장 실패: ${(e as Error).message}`);

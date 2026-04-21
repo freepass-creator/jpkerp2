@@ -8,7 +8,7 @@ import { useRtdbCollection } from '@/lib/collections/rtdb';
 import { useAuth } from '@/lib/auth/context';
 import { useRecentCars } from '@/lib/hooks/useRecentCars';
 import { useAssetByCar, useContractByCar } from '@/lib/hooks/useLookups';
-import { saveEvent } from '@/lib/firebase/events';
+import { saveEvent, checkEventDuplicate } from '@/lib/firebase/events';
 import { Field, TextInput, CompactDateInput } from '@/components/form/field';
 import { CarNumberPicker } from '@/components/form/car-number-picker';
 import { PhotoUploader, type PhotoUploaderHandle } from '@/components/form/photo-uploader';
@@ -193,6 +193,16 @@ export function OpFormBase({
       };
       const extra = buildPayload ? buildPayload(data) : data;
       const payload = { ...base, ...extra, photo_urls: photoUrls };
+
+      // 중복 체크 (과태료 제외)
+      const dup = await checkEventDuplicate(payload);
+      if (dup.exists) {
+        const proceed = confirm(
+          `⚠ 동일한 이벤트가 이미 존재합니다.\n(${dup.eventCode})\n\n그래도 저장하시겠습니까?`,
+        );
+        if (!proceed) return;
+      }
+
       const eventKey = await saveEvent(payload);
 
       if (afterSave) {

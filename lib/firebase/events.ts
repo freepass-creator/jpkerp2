@@ -10,17 +10,64 @@ function shouldReconcile(data: Partial<RtdbEvent>): boolean {
     (Number(data.amount) || 0) > 0;
 }
 
+/** 과태료는 같은 차량에 여러 건 가능하므로 중복 체크 제외 */
+const DEDUP_SKIP_TYPES = new Set(['penalty']);
+
+/**
+ * 이벤트 중복 키 생성. type별로 의미 있는 필드 조합.
+ * - insurance: car_number + type + ins_kind + insurance_company + date
+ * - 기타: car_number + type + date + title
+ */
+function buildDedupKey(data: Record<string, unknown>): string | null {
+  const type = String(data.type ?? '');
+  if (DEDUP_SKIP_TYPES.has(type)) return null;
+  const car = String(data.car_number ?? '');
+  if (!car) return null;
+
+  if (type === 'insurance') {
+    return `${car}|${type}|${data.ins_kind ?? ''}|${data.insurance_company ?? ''}|${data.date ?? ''}`;
+  }
+  return `${car}|${type}|${data.date ?? ''}|${data.title ?? ''}`;
+}
+
+/**
+ * 기존 이벤트 중 동일 dedup_key가 있는지 확인.
+ * 있으면 기존 이벤트 코드를 반환, 없으면 null.
+ */
+export async function checkEventDuplicate(
+  data: Partial<RtdbEvent> & { type: string },
+): Promise<{ exists: boolean; eventCode?: string }> {
+  const dedupKey = buildDedupKey(data as Record<string, unknown>);
+  if (!dedupKey) return { exists: false };
+
+  const q = query(ref(getRtdb(), 'events'), orderByChild('dedup_key'), equalTo(dedupKey));
+  const snap = await get(q);
+  if (!snap.exists()) return { exists: false };
+
+  // status=deleted 제외
+  for (const [, v] of Object.entries(snap.val() as Record<string, { status?: string; event_code?: string }>)) {
+    if (v?.status !== 'deleted') {
+      return { exists: true, eventCode: v.event_code };
+    }
+  }
+  return { exists: false };
+}
+
 /**
  * 운영업무 이벤트 저장 — RTDB /events 컬렉션에 push.
  * bank_tx/card_tx + contract_code 있으면 billings 자동 매칭.
+ * dedup_key로 중복 방지 (과태료 제외).
  */
 export async function saveEvent(
   data: Partial<RtdbEvent> & { type: string; handler_uid?: string },
 ): Promise<string> {
+  const dedupKey = buildDedupKey(data as Record<string, unknown>);
+
   const r = push(ref(getRtdb(), 'events'));
   const payload = {
     ...data,
     event_code: data.event_code || genEventCode(),
+    dedup_key: dedupKey ?? undefined,
     created_at: Date.now(),
     updated_at: serverTimestamp(),
     status: 'active',
