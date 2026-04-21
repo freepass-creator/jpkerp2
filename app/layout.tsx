@@ -4,6 +4,7 @@ import './globals.css';
 
 // 폰트·아이콘·AG Grid 스타일 — 번들링 (CDN 의존 제거)
 import 'pretendard/dist/web/static/pretendard-dynamic-subset.css';
+import '@fontsource/exo-2/600.css';
 import '@phosphor-icons/web/regular';
 import '@phosphor-icons/web/fill';
 import 'ag-grid-community/styles/ag-grid.css';

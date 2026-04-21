@@ -2018,12 +2018,16 @@ i.ph {
 .auth-shell input { -webkit-user-select: text; user-select: text; }
 
 .auth-brand {
-  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  font-size: 20px;
+  font-family: 'Exo 2', 'Pretendard', sans-serif;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  color: #0D0D0F;
+}
+.auth-brand__sub {
   font-weight: 300;
-  letter-spacing: 0.18em;
-  color: #1b2a4a;
-  text-transform: uppercase;
+  color: #1B2A4A;
+  margin-left: 4px;
 }
 
 .auth-copyright {
@@ -2136,7 +2140,7 @@ i.ph {
     gap: 20px;
   }
   .auth-brand {
-    font-size: 20px;
+    font-size: 24px;
     text-align: center;
     padding: 0 24px;
   }

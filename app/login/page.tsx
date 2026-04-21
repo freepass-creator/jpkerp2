@@ -41,7 +41,7 @@ function LoginInner() {
 
   return (
     <div className="auth-shell">
-      <div className="auth-brand">JPK ERP</div>
+      <div className="auth-brand">teamjpk <span className="auth-brand__sub">ERP</span></div>
       <section className="auth-card" aria-label="로그인">
         <header className="auth-card__head">
           <h2 className="auth-card__title">로그인</h2>
