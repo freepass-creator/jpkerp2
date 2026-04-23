@@ -21,6 +21,8 @@ interface Props {
   showCreate?: boolean;
   /** 추가 filter (예: 회원사별 차량만) */
   filter?: (asset: RtdbAsset) => boolean;
+  /** 드롭다운을 위로 띄움 (하단 dock용) */
+  dropUp?: boolean;
 }
 
 /**
@@ -41,6 +43,7 @@ export function CarNumberPicker({
   limit = 10,
   showCreate = true,
   filter,
+  dropUp = false,
 }: Props) {
   const { data: assets } = useRtdbCollection<RtdbAsset>('assets');
   const { data: contracts } = useRtdbCollection<RtdbContract>('contracts');
@@ -149,7 +152,9 @@ export function CarNumberPicker({
         <div
           style={{
             position: 'absolute',
-            top: 'calc(100% + 2px)',
+            ...(dropUp
+              ? { bottom: 'calc(100% + 2px)' }
+              : { top: 'calc(100% + 2px)' }),
             left: 0,
             right: 0,
             zIndex: 20,
@@ -158,7 +163,7 @@ export function CarNumberPicker({
             borderRadius: 2,
             maxHeight: 260,
             overflow: 'auto',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            boxShadow: dropUp ? '0 -4px 12px rgba(0,0,0,0.08)' : '0 4px 12px rgba(0,0,0,0.08)',
           }}
         >
           {filtered.map((a, i) => {
@@ -200,7 +205,19 @@ export function CarNumberPicker({
       )}
       {showEmpty && showCreate && (
         <div
-          className="text-base text-text-muted" style={{ position: 'absolute', top: 'calc(100% + 2px)', left: 0, right: 0, zIndex: 20, background: 'var(--c-surface)', border: '1px solid var(--c-border)', borderRadius: 2, padding: '8px 10px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+          className="text-base text-text-muted"
+          style={{
+            position: 'absolute',
+            ...(dropUp ? { bottom: 'calc(100% + 2px)' } : { top: 'calc(100% + 2px)' }),
+            left: 0,
+            right: 0,
+            zIndex: 20,
+            background: 'var(--c-surface)',
+            border: '1px solid var(--c-border)',
+            borderRadius: 2,
+            padding: '8px 10px',
+            boxShadow: dropUp ? '0 -4px 12px rgba(0,0,0,0.08)' : '0 4px 12px rgba(0,0,0,0.08)',
+          }}
           onMouseDown={(e) => e.preventDefault()}
         >
           매칭 없음 —{' '}
