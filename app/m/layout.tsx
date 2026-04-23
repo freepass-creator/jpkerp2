@@ -6,10 +6,10 @@ import { AuthProvider } from '@/lib/auth/context';
 import { Toaster } from 'sonner';
 
 const TABS: Array<{ href: string; icon: string; label: string }> = [
-  { href: '/m', icon: 'ph-house', label: '홈' },
+  { href: '/m/upload', icon: 'ph-camera', label: '업로드' },
+  { href: '/m/task', icon: 'ph-list-checks', label: '업무' },
   { href: '/m/scan', icon: 'ph-magnifying-glass', label: '조회' },
-  { href: '/m/ocr', icon: 'ph-camera', label: 'OCR' },
-  { href: '/m/todo', icon: 'ph-check-square', label: '할 일' },
+  { href: '/m/settings', icon: 'ph-gear', label: '설정' },
 ];
 
 export default function MobileLayout({ children }: { children: React.ReactNode }) {
@@ -21,7 +21,7 @@ export default function MobileLayout({ children }: { children: React.ReactNode }
         <main className="m-main">{children}</main>
         <nav className="m-tabbar">
           {TABS.map((t) => {
-            const active = t.href === '/m' ? pathname === '/m' : pathname.startsWith(t.href);
+            const active = pathname.startsWith(t.href);
             return (
               <Link
                 key={t.href}

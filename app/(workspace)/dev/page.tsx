@@ -12,6 +12,7 @@ import { OverdueTool } from './tools/overdue-tool';
 import { CutoverTool } from './tools/cutover-tool';
 import { MessageTool } from './tools/message-tool';
 import { DataPurgeTool } from './tools/data-purge-tool';
+import { MobileInboxTool } from './tools/mobile-inbox';
 
 const ITEMS: TypeItem<DevKey>[] = (Object.keys(DEV_LABELS) as DevKey[]).map((k) => ({
   key: k,
@@ -29,6 +30,7 @@ function ToolFor({ k }: { k: DevKey }) {
     case 'alimtalk': return <MessageTool channel="alimtalk" />;
     case 'sms': return <MessageTool channel="sms" />;
     case 'data-purge': return <DataPurgeTool />;
+    case 'mobile-inbox': return <MobileInboxTool />;
     default: return null;
   }
 }
@@ -147,6 +149,11 @@ function DevHelp({ k }: { k: DevKey }) {
       '소프트 삭제: status=deleted 처리, 조회에서 제외되지만 복구 가능.',
       '완전 삭제: DB에서 영구 제거, 복구 불가. 2단계 확인 필요.',
       'admin 이상 권한 필요.',
+    ],
+    'mobile-inbox': [
+      '모바일 /m/upload 에서 현장 직원이 올린 사진·PDF 검토함.',
+      '차량번호·문서유형·업로더·메모 및 썸네일로 내용 확인.',
+      '반영/반려 상태 관리. 반영 처리한 건은 일괄 불러오기 또는 개별 입력으로 수동 DB 생성 필요 (자동 OCR 반영은 추후).',
     ],
   };
   return (
