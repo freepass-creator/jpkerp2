@@ -1,146 +1,101 @@
-# 다음 세션 이어가기 — 전역 감사 큰 공사 3건
+# 다음 세션 이어가기
 
-**작성**: 2026-04-20 · **리포**: github.com/freepass-creator/jpkerp2 (main)
-**이전 세션 결과**: 즉시 + 중간 단계 완료 (아래 "완료 목록" 참조)
+**마지막 작업일**: 2026-04-24
+**원격**: github.com/freepass-creator/jpkerp2 (main)
 
----
+## 오늘 세션 (04-24) 주요 변경
 
-## 이전 세션 완료 요약
+### ✅ 완료·배포
+- **모바일 업로드(/m/upload) v1 플로우 + v2 ERP 디자인으로 완전 재작성**
+  - 맨 위: 차량번호 검색 + 최근 차량 chip
+  - 차량 정보 카드 (회원사·세부모델·계약자·계약상태)
+  - 3 카테고리 가로 (출고·반납·상품화) + 액션시트(카메라/앨범)
+  - 썸네일 그리드 (4열) + 업로드 진행률 %
+  - 초기화·업로드 2버튼 하단 고정 dock (탭바 위)
+  - 병렬 업로드 3동시 + 이미지 리사이즈 (2048px, JPEG 0.85)
 
-### 기능 추가
-- **반납/회수 상태 전이** — [`app/(workspace)/input/operation/forms/ioc-form.tsx`](app/(workspace)/input/operation/forms/ioc-form.tsx) afterSave: 정상반납→`계약완료` + asset `휴차/상품화대기/정비중`, 강제회수→`계약해지` + `상품화대기`, 정상출고→`가동중`
-- **반납 추가청구 → billings** — [`lib/derive/billings.ts`](lib/derive/billings.ts) `deriveBillingsFromReturnExtras()` 신규 (과주행·연료부족·손상수리 행 생성)
-- **계약 연장 폼** — [`app/(workspace)/input/forms/contract-extension-form.tsx`](app/(workspace)/input/forms/contract-extension-form.tsx) 신규, `is_extension=true` + `original_contract_id` + 수납스케줄 재파생 + 원본 계약 `계약완료` 처리
-- **/my 고객 포털** — [`app/my/page.tsx`](app/my/page.tsx), [`app/api/my/route.ts`](app/api/my/route.ts), [`lib/my/portal-auth.ts`](lib/my/portal-auth.ts). 차량번호 + 등록번호(주민/법인/사업자/전화) 인증 + HMAC 세션 30분. 운영 전 `MY_PORTAL_SECRET` env 설정 필수.
+- **차량번호 선택사항**
+  - 확정 → `events` 직접 저장 (photo_urls 묶음)
+  - 미확정 → `mobile_uploads` 미결업무 (관리자 inbox 검토 후 반영)
 
-### 전역 감사 정리 (즉시 · 중간)
-- `isActiveContractStatus()` ([`lib/data/contract-status.ts`](lib/data/contract-status.ts)) 5파일 적용 — ioc-form, disposal-form, car-number-picker, bulk-delivery, api/my
-- `shortDate()` → [`lib/date-utils.ts`](lib/date-utils.ts) 승격. op-form-base / contract-extension-form 로컬 정의 제거
-- `ph-car-simple` → `ph-car` 일원화 (my/page.tsx)
-- `.my-pill` CSS 삭제, `.jpk-pill tone-X`로 단일화 (my/page.tsx 4곳)
-- [`lib/hooks/useLookups.ts`](lib/hooks/useLookups.ts) 신규 — `useAssetByCar`, `useContractByCar({activeOnly, requireContractor})`, `useContractByCode`. 6파일에 적용 (op-form-base, disposal-form, ioc-form, op-context-panel, product-register-form, key-form)
-- [`components/shared/empty-state.tsx`](components/shared/empty-state.tsx) 신규 (UI-STANDARDS 9.3 준수). op-context-panel + input-context-panel 적용
+- **/m/* 레이아웃 auth gate** — 비로그인 → `/login?redirect=/m/upload` 자동
 
----
+- **mobile-inbox 자동 이벤트 생성** — `car_number` 있는 mobile_uploads approve 시 `events/{type}` 레코드 자동 생성
 
-## 🚧 큰 공사 3건 (다음 세션)
+### 🔧 환경 설정 (회사 PC에 적용됨)
+- **Firebase Storage 활성화** (`jpkerp.firebasestorage.app` 버킷 생성, asia-northeast3)
+- **Storage CORS 설정 완료** (`scripts/firebase-cors.json` → gsutil 적용)
+  - 허용: localhost:7401/3000, LAN IP 192.168.45.231:7401, jpkerp.com, *.vercel.app
+- **.env.local** 에 `GEMINI_API_KEY` 추가 (로컬 전용, Vercel 미반영 — OCR 제거했으니 무관)
+- **next.config.mjs** `allowedDevOrigins: ['192.168.45.231']` 추가 (Next 16 LAN 접근용)
 
-### 1. 인라인 스타일 청소 — **먼저 시작 권장**
-**리스크**: 저 · **노동**: 고 (120+곳)
-
-`style={{ fontSize: 11/12/13, color: 'var(--c-text-muted)' }}` 패턴이 120회 이상 반복. Tailwind 없이 CSS 유틸 클래스로 승격.
-
-**작업 순서**:
-1. [`app/globals.css`](app/globals.css) 끝에 유틸 추가:
-   ```css
-   .text-xs  { font-size: 10px; }
-   .text-sm  { font-size: 11px; }
-   .text-md  { font-size: 12px; }
-   .text-lg  { font-size: 13px; }
-   .text-muted { color: var(--c-text-muted); }
-   .text-sub   { color: var(--c-text-sub); }
-   ```
-2. Grep으로 상위 빈발 파일 선별 (op-context-panel, rtdb-status, my/page.tsx, ocr-capture-form 순)
-3. 파일별로 `style={{ fontSize: 11 }}` → `className="text-sm"` 치환, 혼합된 경우 일부만 추출
-4. 치환 후 시각 확인 (`npm run dev` → 해당 페이지 열람)
-
-**주의**: `fontSize: 10px`는 `--font-size-xs` 토큰과 겹침 확인. 기존 토큰 있으면 재활용.
+### 🗑️ 정리됨
+- `api/ocr/extract` 에서 `plate` 타입 제거 (OCR 제거 후 데드코드)
+- 구 `.m-up-*` CSS 블록 전부 교체
 
 ---
 
-### 2. InputFormShell → OpFormBase 통합
-**리스크**: 중 · **노동**: 중
+## 🚧 내일 할 일
 
-두 shell 기능 99% 동일. `OpFormBase`는 `op-context-store`(차량번호 공유)에 의존하는데 개별입력 폼은 이 store를 안 씀 — **의존성 분리가 선결**.
+### 1. 디자인 규격 통일 · 중복 제거 (핵심)
+이전 감사 리포트 (`memory/project_jpkerp_next.md` 참조) 기반 잔여 작업:
 
-**설계 선택지**:
-- **A안**: OpFormBase에서 `useOpContext` 의존을 prop으로 주입 (`carNumber` prop). 둘 다 같은 shell 사용 가능
-- **B안**: 두 shell의 공통부를 `BaseFormShell`로 추출, OpFormBase는 확장만 담당. InputFormShell 유지하되 내부 구현 공유
+**A. 인라인 스타일 청소 — Top 3 파일:**
+- [ ] `app/(workspace)/input/operation/op-context-panel.tsx` (25+ 인라인)
+- [ ] `app/(workspace)/input/operation/forms/ignition-form.tsx` (36 인라인)
+- [ ] `app/(workspace)/upload/upload-client.tsx` (25 인라인)
+- 패턴: `style={{ fontSize: 11 }}` → `className="text-xs"`, `color: 'var(--c-text-muted)'` → `className="text-text-muted"`
 
-**권장**: A안. `op-context-store`는 `/input/operation` workspace 전용(세 패널이 차량번호 공유)이라 일반 input에 끌어들이면 안 됨. OpFormBase를 "shell + (옵션)외부 컨텍스트" 형태로.
+**B. 버튼 토큰 통합:**
+- `.m-up-pick-btn` (제거됨) / `.m-btn` (44px) / `.m-up-submit-btn` (48px)
+- `.btn--lg` size modifier 도입 검토
 
-**작업 순서**:
-1. [`app/(workspace)/input/operation/op-form-base.tsx`](app/(workspace)/input/operation/op-form-base.tsx) 에 `carNumber?/date?/onCarChange?/onDateChange?` props 추가, `useOpContext`를 default fallback으로
-2. [`app/(workspace)/input/forms/input-form-shell.tsx`](app/(workspace)/input/forms/input-form-shell.tsx) 를 래퍼로 얇게 (OpFormBase 재사용)
-3. 기존 7개 input 폼(asset/contract/customer/task/gps/partner/ocr/extension) 영향 확인
-4. 테스트: 각 폼 1회씩 등록 테스트
+**C. 컴포넌트 승격 후보:**
+- `<StatusBadge tone=... dDay=... />` — 조건부 색상 pill 산재
+- `<CarInfoDisplay asset contract />` — op-form-base / op-context-panel / m-upload 중복
 
-**의외 복잡점**: InputFormShell은 `form="inputForm"` / OpFormBase는 `form="opForm"` id가 다름. panel-head 버튼이 id로 submit 연결돼 있어서, 통합 시 한쪽 id 통일 또는 button도 분리 필요.
+### 2. 업로드 통합 테스트
+- [ ] 로그인 → 차량 선택 → 3카테고리 × 2방법(카메라/앨범) 각각 시나리오
+- [ ] 차량 미선택 업로드 → mobile-inbox에서 차량 매칭 + approve → events 생성 확인
+- [ ] 업로드한 photo_urls가 asset 프로필 페이지에 잘 노출되는지
 
----
+### 3. 보류·검토 사항
+- **Shell 이원화 (InputFormShell vs OpFormBase)** — 이전 감사에서 "구조적 차이 유지 권장" 나옴. 통합 강행 여부 재검토 불필요.
+- **OpKey 17→11 축소** — DB 이벤트 `type` 마이그레이션 필요, 리스크 큼. 보류 유지.
 
-### 3. OpKey 17 → 11 축소
-**리스크**: **높음** (DB 이벤트 `type` 마이그레이션 필요) · **노동**: 중
-
-현재 [`app/(workspace)/input/operation/op-types.ts`](app/(workspace)/input/operation/op-types.ts) `OpKey` 17종 중 실질 중복:
-
-| 현재 | 통합안 | 이주 전략 |
-|-----|-------|---------|
-| `maint` + `repair` | `pc_work` (type_detail) | events 테이블에서 `type='maint'` → `type='pc_work', type_detail='maint'` 일괄 변환 |
-| `penalty` + `penalty_notice` | `penalty` (subtype) | `type='penalty_notice'` → `type='penalty', subtype='notice'` |
-| `product` + `product_register` | `product_flow` (stage) | `type='product_register'` → `type='product_flow', stage='register'` |
-| `wash` → `pc_work` 흡수 | `pc_work` (type_detail='wash') | `type='wash'` → `type='pc_work', type_detail='wash'` |
-
-**보류 권장**: 지금은 enum 줄이기보다, 운영 중 데이터 이주 스크립트 + 롤백 플랜 준비 후 진행.
-당장 진행하려면 [`scripts/migrate.ts`](scripts/migrate.ts) 참조해서 옮김 스크립트 작성, dev 환경에서 먼저 적용 → 프로덕션 RTDB 백업 → 일괄 이주.
+### 4. 기타
+- `app/my/page.tsx` 고객 포털 — 연락처 번호 하드코딩 (`1588-0000`, `02-0000-0000`, `jpkpyh@gmail.com`) 실제값 교체
+- Vercel env에 `GEMINI_API_KEY` 추가 (나중에 OCR 다시 쓸 때)
 
 ---
 
-## 기타 남은 것
+## 참고 · 현재 아키텍처
 
-### 미수금 3중 관리 정리 (이전 세션에서 유예)
-현재 `collect event` / `billing.overdue` / `status/overdue` 3곳에 흩어짐.
-**제안된 경계**:
-- `billings` = SoT (금액·상태)
-- `collect event` = 처리 로그 (독촉·내용증명만)
-- `status/overdue` = billing.overdue 뷰
-
-**작업**: `collect-form.tsx` 재검토 → 금액 필드가 있으면 billing 파생으로 전환. event는 log-only로.
-
-### env 세팅 (회사 PC)
-```bash
-cp .env.local.example .env.local
-# .env.local에 Firebase 키 채우기 (NEXT_PUBLIC_FIREBASE_*)
-# /my 포털 운영 전: MY_PORTAL_SECRET 추가 (HMAC 키)
+**업로드 플로우 (최종)**:
+```
+폰 /m/upload
+  ├── 로그인 확인 (auth gate)
+  ├── 차량번호 선택 (선택사항)
+  ├── 카테고리 탭 (출고/반납/상품화) → 액션시트 (카메라/앨범)
+  ├── 파일 선택 → 썸네일 표시
+  ├── [업로드] 클릭
+  │
+  ├── 차량번호 있음:
+  │   ├── Firebase Storage: photos/{type}/{car}/{ts}_{rand}.{ext}
+  │   └── RTDB events: { type, car_number, photo_urls, ... }
+  │
+  └── 차량번호 없음 (미결업무):
+      ├── Firebase Storage: photos/{type}/_no_car/{ts}_{rand}.{ext}
+      └── RTDB mobile_uploads: { car_number: null, kind, status: 'pending', matched: false, ... }
+          → 관리자 /dev?tool=mobile-inbox 에서 차량 매칭 + 반영
+          → events 생성 (inbox approve 시 자동)
 ```
 
-### 포털 하드코딩 교체
-[`app/my/page.tsx`](app/my/page.tsx) 긴급연락 섹션:
-- `tel:1588-0000` (사고·정비 24시간)
-- `tel:02-0000-0000` (고객센터)
-- 이메일 `jpkpyh@gmail.com` (신청 4종)
-
-실제 번호/주소로 교체 필요.
-
----
-
-## 감사 결과 요약 (참고)
-
-**치명적 발견**:
-- `isActiveContractStatus()` 만들어놓고 실제 0회 호출 → 이번 세션에 5파일 적용으로 해결
-- `InputFormShell` vs `OpFormBase` 기능 99% 동일 → 통합 대상
-- `OpKey` 17종 중 실질 중복 다수 → 11종으로 축소 가능
-
-**디자인 이중 정의 (남은 것)**:
-- 버튼 `.btn` (32px) vs `.m-btn` (44px, 폰트 리터럴) — 토큰 통일 검토
-- Key-Value `.jpk-item-table` vs `.my-kv` — 용도 분리, 내부 토큰 공유
-
-**아이콘 규약** (결정됨, 문서화만 남음):
-- 일반 차량 `ph-car`, 사고 `ph-car-profile`, `ph-car-simple` 금지
-- 고객 신규 `ph-user-circle-plus`, 직원 `ph-users-three`
-- 저장 진행 `ph-spinner spin`, 완료 `ph-check` (단일 checkmark) / `ph-check-circle` (완료 상태)
-
----
-
-## 업무 흐름 커버리지
-
-| 단계 | 폼 | 상태 |
-|-----|---|-----|
-| 차량 구입 | asset-create-form + ocr-capture-form | ✓ |
-| 계약 체결 | contract-create-form | ✓ (deriveBillingsFromContract 자동) |
-| 사후 관리 | 17개 운영폼 | ✓ (OpKey 축소 후 11개 목표) |
-| 계약 종료 | ioc-form `정상반납` (추가청구 포함) | ✓ |
-| 연장 운행 | contract-extension-form | ✓ |
-| 재계약 | contract-create-form 재활용 + `is_renewal=true` | **폼 미분리** — 필요시 전용 폼 신규 |
-
-**구멍**: 재계약 전용 폼 없음. 지금은 신규 계약 폼에서 `is_renewal` 플래그 수동 세팅해야 함. 필요도 낮으면 유지.
+**Firebase Storage 구조**:
+```
+gs://jpkerp.firebasestorage.app/
+  photos/
+    delivery/{car_number or _no_car}/...
+    return/{car_number or _no_car}/...
+    product/{car_number or _no_car}/...
+```

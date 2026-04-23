@@ -61,15 +61,6 @@ const VEHICLE_REG_SCHEMA = {
   ],
 };
 
-const PLATE_SCHEMA = {
-  type: Type.OBJECT,
-  properties: {
-    car_number: { type: Type.STRING, nullable: true, description: '한국 차량번호 (숫자 2-3자리 + 한글 1자 + 숫자 4자리)' },
-    confidence: { type: Type.STRING, nullable: true, description: 'high / medium / low' },
-  },
-  required: ['car_number', 'confidence'],
-};
-
 const BUSINESS_REG_SCHEMA = {
   type: Type.OBJECT,
   properties: {
@@ -148,37 +139,6 @@ const TYPE_SPECS: Record<string, TypeSpec> = {
 
 값이 없으면 null.`,
     schema: VEHICLE_REG_SCHEMA,
-  },
-  plate: {
-    label: '차량번호 감지',
-    prompt: `이 이미지(또는 문서)에서 한국 차량번호를 찾아 추출하세요.
-
-## 차량번호 포맷
-정확히 다음 패턴: \`\\d{2,3}[가-힣]\\d{4}\` (숫자 2~3자리 + 한글 1자 + 숫자 4자리)
-
-### ✅ 올바른 예
-- \`12가3456\`, \`123하4567\`, \`01도9893\`, \`02마4731\`
-
-### 🚫 차량번호 아님
-- 문서번호(\`202512-039861\`, 하이픈 포함)
-- 법인등록번호(\`110111-8596368\`)
-- VIN(\`5YJ3E1EB0LF695181\`, 17자)
-- 형식번호(\`JA51BA-T6-P\`)
-- 전화번호·사업자번호 등
-
-## 입력 종류
-- 번호판 사진 (정면/후면)
-- 차량등록증·보험증권·견적서·정비명세서·고지서 등 문서
-- 차량이 포함된 일반 사진
-
-## 출력 규칙
-1. **차량번호가 여러 개** 보이면 가장 크고 선명한 것 1개
-2. **번호판 사진**이면 반드시 읽어낼 것 (신뢰도 high)
-3. **문서**면 제목·헤더 근처의 차량번호 (신뢰도 high), 본문 중에 있으면 medium
-4. 차량번호를 확신할 수 없으면 \`car_number: null\`, \`confidence: "low"\`
-
-값은 공백·하이픈 없이 붙여서 (예: \`12가3456\`).`,
-    schema: PLATE_SCHEMA,
   },
   business_reg: {
     label: '사업자등록증',
