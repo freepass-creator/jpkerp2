@@ -443,12 +443,20 @@ export function UploadClient() {
             seenCars.add(reg.car_number);
 
             // 제조사/모델 분리 (차명 = "현대 아반떼 1.6" → maker + model)
+            // "차대번호" 같은 잘못된 값은 버림
             let manufacturer = '';
-            let carModel = reg.car_name ?? '';
-            const nameTokens = carModel.split(/\s+/);
-            if (nameTokens.length > 1) {
-              manufacturer = nameTokens[0];
-              carModel = nameTokens.slice(1).join(' ');
+            let carModel = '';
+            const rawName = (reg.car_name ?? '').trim();
+            const invalidNames = ['차대번호', '형식', '차종', '제조사', '모델'];
+            if (rawName && !invalidNames.includes(rawName)) {
+              const nameTokens = rawName.split(/\s+/).filter(Boolean);
+              if (nameTokens.length > 1) {
+                manufacturer = nameTokens[0];
+                carModel = nameTokens.slice(1).join(' ');
+              } else if (nameTokens.length === 1) {
+                // 단일 토큰이면 모델로만 쓰고 제조사는 비워둠 (normalizeAsset이 채워줌)
+                carModel = nameTokens[0];
+              }
             }
 
             assetRows.push({
