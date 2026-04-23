@@ -1308,6 +1308,66 @@ a:focus-visible,
   min-height: calc(100vh - 60px - 220px); /* tabbar + dock 공간 제외, 기본 차림 */
 }
 
+/* Step 0: 큰 업로드 시작 버튼 */
+.m-up-start {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px;
+  padding: 48px 20px;
+  background: var(--c-surface);
+  border: 2px dashed var(--c-border-strong);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  flex: 1;
+  min-height: 280px;
+  transition: border-color .12s, background .12s;
+}
+.m-up-start:active {
+  border-color: var(--c-primary);
+  background: var(--c-primary-bg);
+}
+.m-up-start > i.ph-fill {
+  font-size: 56px;
+  color: var(--c-primary);
+}
+.m-up-start-title {
+  font-size: 17px; font-weight: 700;
+  color: var(--c-text);
+  letter-spacing: -0.02em;
+}
+.m-up-start-sub {
+  font-size: 12px;
+  color: var(--c-text-muted);
+}
+
+/* Step 프롬프트 (차량/업무 선택 안내) */
+.m-up-prompt {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px;
+  background: var(--c-primary-bg);
+  color: var(--c-primary);
+  border-radius: var(--r-sm);
+  font-size: 13px; font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.m-up-prompt > i.ph-fill { font-size: 16px; }
+.m-up-prompt b { font-weight: 800; }
+
+/* '그냥 업로드' 대체 링크 */
+.m-up-alt-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  color: var(--c-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  align-self: center;
+  text-decoration: underline;
+  letter-spacing: -0.02em;
+  font-family: inherit;
+}
+.m-up-alt-link b { color: var(--c-text-sub); font-weight: 700; }
+
 /* 차량 정보 슬롯 — 빈 상태 / 채워진 상태 모두 동일 높이 (버튼 레이아웃 고정) */
 .m-up-empty,
 .m-up-car {
@@ -1341,6 +1401,18 @@ a:focus-visible,
   letter-spacing: -0.03em; color: var(--c-text);
   line-height: 1.15;
 }
+.m-up-auto-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--r-sm);
+  background: var(--c-primary-bg);
+  color: var(--c-primary);
+  font-size: 10px; font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.m-up-auto-badge > i.ph-fill { font-size: 10px; }
+
 .m-up-car-rows {
   margin: 8px 0 0;
   display: flex; flex-direction: column; gap: 4px;
