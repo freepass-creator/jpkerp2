@@ -215,20 +215,48 @@ export function AssetCreateForm() {
         if (hint) matchedMfr = hint;
       }
 
-      // 세부모델이 마스터에 정확히 존재하는지 확인. 없으면 fuzzy(공백/괄호 제거) 재시도.
+      // 세부모델 매칭: Gemini가 고른 sub + 연식 기반 검증.
+      // Gemini가 최신 세대로 잘못 고르는 경우가 있어 car_year가 생산기간 밖이면 같은 maker+model
+      // 내에서 연식 맞는 sub로 재선택한다.
       let finalSub = '';
       let masterHit: CarModelRec | null = null;
-      if (matchedMfr && matchedModel && matchedSub) {
+      if (matchedMfr && matchedModel) {
         const norm = (s: string) => s.replace(/[\s()]/g, '').toLowerCase();
-        const target = norm(matchedSub);
-        masterHit = activeMasters.find(
-          (m) => m.maker === matchedMfr && m.model === matchedModel && m.sub === matchedSub,
-        ) ?? activeMasters.find(
-          (m) => m.maker === matchedMfr && m.model === matchedModel && m.sub && norm(m.sub) === target,
-        ) ?? null;
+        const siblings = activeMasters.filter(
+          (m) => m.maker === matchedMfr && m.model === matchedModel && m.sub,
+        );
+        // 1) Gemini가 고른 sub 1차 매칭 (정확/fuzzy)
+        if (matchedSub) {
+          const target = norm(matchedSub);
+          masterHit = siblings.find((m) => m.sub === matchedSub)
+            ?? siblings.find((m) => m.sub && norm(m.sub) === target)
+            ?? null;
+        }
+        // 2) 연식 검증 — car_year가 생산기간 밖이면 올바른 세대로 교체
+        const yr = reg.car_year;
+        if (yr && siblings.length > 0) {
+          const yearFits = (m: CarModelRec): boolean => {
+            const s = (m.production_start ?? (m.year_start ? `${m.year_start}-01` : '')) as string;
+            const e = (m.production_end ?? (m.year_end ? `${m.year_end}-12` : '')) as string;
+            const startYr = s ? Number(s.slice(0, 4)) : 0;
+            const endYr = !e || e === '현재' ? 9999 : Number(e.slice(0, 4));
+            return startYr <= yr && yr <= endYr;
+          };
+          if (!masterHit || !yearFits(masterHit)) {
+            // 연식 맞는 sub 후보 중 production_start 가장 최신 우선 (대부분 최신 리프레시 선호)
+            const fit = siblings
+              .filter(yearFits)
+              .sort((a, b) => {
+                const sa = String(a.production_start ?? a.year_start ?? '');
+                const sb = String(b.production_start ?? b.year_start ?? '');
+                return sb.localeCompare(sa);
+              });
+            if (fit.length > 0) masterHit = fit[0];
+          }
+        }
         if (masterHit) {
           finalSub = masterHit.sub ?? '';
-          // Gemini가 matchedModel을 살짝 다르게 반환했을 수 있으니 마스터 값으로 교정
+          // Gemini가 model을 살짝 다르게 반환했을 수 있으니 마스터 값으로 교정
           matchedModel = masterHit.model ?? matchedModel;
           matchedMfr = masterHit.maker ?? matchedMfr;
         }
