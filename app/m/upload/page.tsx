@@ -78,7 +78,7 @@ export default function MobileUpload() {
     }
   }, []);
 
-  const onPick = useCallback((files: FileList | null) => {
+  const onPick = useCallback((files: FileList | null, pickedKind: Kind = 'delivery') => {
     if (!files || files.length === 0) return;
     const arr = Array.from(files);
     setItems((prev) => {
@@ -86,16 +86,19 @@ export default function MobileUpload() {
       if (remaining <= 0) { toast.error(`최대 ${MAX_FILES}장까지`); return prev; }
       const add = arr.slice(0, remaining).map((file) => ({ file, url: URL.createObjectURL(file) }));
       if (arr.length > remaining) toast.warning(`${remaining}장만 추가됨 (최대 ${MAX_FILES})`);
-      // 첫 등장 + 차량 미입력시에만 자동 감지 1회 (이미지 or PDF)
-      if (prev.length === 0 && !carNumber) {
-        const ocrTarget = add.find((i) =>
-          i.file.type.startsWith('image/') || i.file.type === 'application/pdf'
-        );
-        if (ocrTarget) detectPlate(ocrTarget.file);
+      // 첫 등장시 kind 기본값 세팅 + OCR 감지 (차량 미입력일 때만)
+      if (prev.length === 0) {
+        if (!kind) setKind(pickedKind);
+        if (!carNumber) {
+          const ocrTarget = add.find((i) =>
+            i.file.type.startsWith('image/') || i.file.type === 'application/pdf'
+          );
+          if (ocrTarget) detectPlate(ocrTarget.file);
+        }
       }
       return [...prev, ...add];
     });
-  }, [carNumber, detectPlate]);
+  }, [carNumber, kind, detectPlate]);
 
   const removeItem = useCallback((idx: number) => {
     setItems((prev) => {
@@ -115,10 +118,9 @@ export default function MobileUpload() {
   const submit = useCallback(async () => {
     const cn = sanitizeCarNumber(carNumber);
     if (items.length === 0) { toast.error('사진·파일을 선택하세요'); return; }
-    if (!kind) { toast.error('업무 구분을 선택하세요'); return; }
-    // 출고·반납·상품화는 차량번호 필수. '업로드(other)'는 차량 없이 가능
+    // '업로드(other)' 외엔 차량번호 필수
     const requiresCar = kind !== 'other';
-    if (requiresCar && !cn) { toast.error('차량번호를 선택하세요'); return; }
+    if (requiresCar && !cn) { toast.error('차량번호를 입력하세요'); return; }
 
     setBusy(true);
     const store = useSaveStore.getState();
@@ -155,9 +157,7 @@ export default function MobileUpload() {
 
   // 단계 판정 — 진행형 노출
   const noFiles = items.length === 0;
-  const needsCar = !noFiles && !hasCar && kind !== 'other';
-  const needsKind = !noFiles && (hasCar || kind === 'other') && kind === null;
-  const canSubmit = !noFiles && kind !== null && (hasCar || kind === 'other');
+  const canSubmit = !noFiles && (hasCar || kind === 'other');
 
   return (
     <>
@@ -266,47 +266,6 @@ export default function MobileUpload() {
               </div>
             )}
 
-            {/* Step 2: 업무 구분 프롬프트 (차량 선택 후) */}
-            {(hasCar || kind === 'other') && (
-              <>
-                {needsKind && (
-                  <div className="m-up-prompt">
-                    <i className="ph-fill ph-hand-pointing" />
-                    <span>어떤 업무인가요?</span>
-                  </div>
-                )}
-                <div className="m-up-kinds">
-                  {KINDS.map(({ k, label, icon, tint }) => {
-                    const selected = kind === k;
-                    return (
-                      <button
-                        key={k}
-                        type="button"
-                        onClick={() => setKind(k)}
-                        className={`m-up-kind ${selected ? 'is-selected' : ''}`}
-                        style={{ ['--kind-tint' as string]: tint }}
-                      >
-                        <span className="m-up-kind-icon">
-                          <i className={`ph-fill ${icon}`} />
-                        </span>
-                        <span className="m-up-kind-label">{label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-
-            {/* '업로드' 유형은 차량 없이도 선택 가능 — 버튼 항상 표시 */}
-            {!hasCar && kind !== 'other' && (
-              <button
-                type="button"
-                onClick={() => setKind('other')}
-                className="m-up-alt-link"
-              >
-                <i className="ph ph-paperclip" /> 차량 연결 없이 <b>그냥 업로드</b>
-              </button>
-            )}
           </>
         )}
       </div>
@@ -324,7 +283,7 @@ export default function MobileUpload() {
             {busy ? '업로드 중' : `${items.length}장 업로드`}
           </button>
         )}
-        {!noFiles && !hasCar && !detected && (
+        {!noFiles && !hasCar && !detected && !detecting && (
           <>
             {recent.list.length > 0 && (
               <div className="m-up-dock-recent">
@@ -354,7 +313,7 @@ export default function MobileUpload() {
             </div>
           </>
         )}
-        {/* 최하단: 파일 · 사진 picker (좌↔우) — 항상 고정 */}
+        {/* 최하단: 파일 · 사진 picker — 좌=파일(업로드), 우=사진(출고 기본) */}
         <div className="m-up-pickers">
           <label className="m-up-pick-btn">
             <input
@@ -362,7 +321,7 @@ export default function MobileUpload() {
               accept="application/pdf,.doc,.docx,.xls,.xlsx,.hwp,.hwpx"
               multiple
               hidden
-              onChange={(e) => { onPick(e.target.files); e.target.value = ''; }}
+              onChange={(e) => { onPick(e.target.files, 'other'); e.target.value = ''; }}
             />
             <i className="ph-fill ph-file-text" />
             <span>파일</span>
@@ -373,7 +332,7 @@ export default function MobileUpload() {
               accept="image/*,video/*"
               multiple
               hidden
-              onChange={(e) => { onPick(e.target.files); e.target.value = ''; }}
+              onChange={(e) => { onPick(e.target.files, 'delivery'); e.target.value = ''; }}
             />
             <i className="ph-fill ph-images" />
             <span>사진</span>
