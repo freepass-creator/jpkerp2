@@ -78,11 +78,8 @@ export function OpContextPanel() {
 
   if (!carNumber) {
     return (
-      <div
-        className="flex flex-col items-center justify-center gap-2 text-text-muted"
-        style={{ padding: 24, height: '100%' }}
-      >
-        <i className="ph ph-identification-card" style={{ fontSize: 32 }} />
+      <div className="flex flex-col items-center justify-center gap-2 text-text-muted p-6 h-full">
+        <i className="ph ph-identification-card text-[32px]" />
         <div className="text-xs">차량번호 입력 시<br />계약 · 수납 · 운영이력이 여기 표시됩니다.</div>
       </div>
     );
@@ -90,10 +87,7 @@ export function OpContextPanel() {
 
   if (!asset && !contract) {
     return (
-      <div
-        className="flex flex-col items-center justify-center gap-2 text-text-muted"
-        style={{ padding: 24, height: '100%' }}
-      >
+      <div className="flex flex-col items-center justify-center gap-2 text-text-muted p-6 h-full">
         <i className="ph ph-warning-circle text-[24px]" />
         <div className="text-xs">{carNumber} — 등록되지 않은 차량</div>
       </div>
@@ -104,21 +98,21 @@ export function OpContextPanel() {
   const dDay = contractEnd ? daysBetween(today(), contractEnd) : null;
 
   return (
-    <div className="overflow-y-auto scrollbar-thin" style={{ padding: 16, height: '100%' }}>
+    <div className="overflow-y-auto scrollbar-thin p-4 h-full">
       {/* 차량 정보 */}
       {asset && (
-        <section className="form-section" style={{ paddingTop: 0 }}>
+        <section className="form-section pt-0">
           <div className="form-section-title">
             <i className="ph ph-car" />차량
           </div>
-          <div className="text-xl" style={{ fontWeight: 600 }}>{asset.car_number}</div>
-          <div className="text-text-sub text-xs" style={{ marginTop: 2 }}>
+          <div className="text-xl font-bold">{asset.car_number}</div>
+          <div className="text-text-sub text-xs mt-0.5">
             {[asset.manufacturer, asset.car_model, asset.car_year].filter(Boolean).join(' · ')}
           </div>
           {asset.detail_model && (
             <div className="text-text-muted text-xs">{asset.detail_model}</div>
           )}
-          <div className="text-text-muted text-xs" style={{ marginTop: 4 }}>
+          <div className="text-text-muted text-xs mt-1">
             {asset.partner_code ?? '-'} · {asset.fuel_type ?? ''} · {asset.ext_color ?? ''}
           </div>
         </section>
@@ -130,11 +124,7 @@ export function OpContextPanel() {
           <i className="ph ph-handshake" />계약
           {dDay !== null && (
             <span
-              className="badge"
-              style={{
-                marginLeft: 'auto',
-                color: dDay < 0 ? 'var(--c-danger)' : dDay <= 30 ? 'var(--c-warn)' : 'var(--c-success)',
-              }}
+              className={`badge ml-auto ${dDay < 0 ? 'text-danger' : dDay <= 30 ? 'text-warn' : 'text-success'}`}
             >
               {dDay < 0 ? `만기 ${-dDay}일 경과` : `D-${dDay}`}
             </span>
@@ -142,11 +132,11 @@ export function OpContextPanel() {
         </div>
         {contract ? (
           <>
-            <div className="text-xl" style={{ fontWeight: 600 }}>{contract.contractor_name}</div>
-            <div className="text-text-sub text-xs" style={{ marginTop: 2 }}>
+            <div className="text-xl font-bold">{contract.contractor_name}</div>
+            <div className="text-text-sub text-xs mt-0.5">
               {contract.contractor_phone} · {contract.contract_code}
             </div>
-            <div className="text-text-muted text-xs" style={{ marginTop: 4 }}>
+            <div className="text-text-muted text-xs mt-1">
               {normalizeDate(contract.start_date)} ~ {contractEnd} · {contract.rent_months}개월 · 월 {fmt(Number(contract.rent_amount))}원
             </div>
           </>
@@ -161,7 +151,7 @@ export function OpContextPanel() {
           <div className="form-section-title">
             <i className="ph ph-currency-krw" />수납
             {billSummary.unpaidCount > 0 && (
-              <span className="badge badge-danger" style={{ marginLeft: 'auto' }}>
+              <span className="badge badge-danger ml-auto">
                 {billSummary.unpaidCount}회 미납
               </span>
             )}
@@ -169,11 +159,11 @@ export function OpContextPanel() {
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
               <div className="text-text-muted">누적 청구</div>
-              <div className="num" style={{ fontWeight: 600 }}>{fmt(billSummary.totalDue)}원</div>
+              <div className="num font-bold">{fmt(billSummary.totalDue)}원</div>
             </div>
             <div>
               <div className="text-text-muted">누적 수납</div>
-              <div className="num text-success" style={{ fontWeight: 600 }}>
+              <div className="num text-success font-bold">
                 {fmt(billSummary.totalPaid)}원
               </div>
             </div>
@@ -189,8 +179,7 @@ export function OpContextPanel() {
             <div>
               <div className="text-text-muted">최장 연체</div>
               <div
-                className="num"
-                style={{ fontWeight: 600, color: billSummary.maxOverdue > 30 ? 'var(--c-danger)' : billSummary.maxOverdue > 7 ? 'var(--c-warn)' : 'var(--c-text-muted)' }}
+                className={`num font-bold ${billSummary.maxOverdue > 30 ? 'text-danger' : billSummary.maxOverdue > 7 ? 'text-warn' : 'text-text-muted'}`}
               >
                 {billSummary.maxOverdue ? `${billSummary.maxOverdue}일` : '-'}
               </div>
@@ -203,34 +192,29 @@ export function OpContextPanel() {
       <section className="form-section">
         <div className="form-section-title">
           <i className="ph ph-clock-counter-clockwise" />최근 운영이력
-          <span className="text-text-muted text-2xs" style={{ marginLeft: 'auto', fontWeight: 400 }}>
+          <span className="text-text-muted text-2xs ml-auto font-normal">
             {carEvents.length > 5 ? `최근 5 / 총 ${carEvents.length}` : `${carEvents.length}건`}
           </span>
         </div>
         {carEvents.length === 0 ? (
           <EmptyState icon="ph-clock-counter-clockwise" title="이력 없음" size="sm" />
         ) : (
-          <div className="flex flex-col" style={{ gap: 6 }}>
+          <div className="flex flex-col gap-1.5">
             {carEvents.slice(0, 5).map((e) => {
               const meta = metaFor(e.type);
               return (
                 <div key={e._key} className="flex items-start gap-2 text-xs">
-                  <div className="text-text-muted num" style={{ width: 50, flexShrink: 0 }}>
+                  <div className="text-text-muted num w-[50px] flex-shrink-0">
                     {fmtDate(e.date)}
                   </div>
-                  <i className={`ph ${meta.icon} text-base`} style={{ color: meta.color, marginTop: 2 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <i className={`ph ${meta.icon} text-base mt-0.5`} style={{ color: meta.color }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate">
                       {e.title ?? meta.label}
-                      {e.amount ? <span className="text-text-muted num" style={{ marginLeft: 6 }}>{fmt(Number(e.amount))}원</span> : null}
+                      {e.amount ? <span className="text-text-muted num ml-1.5">{fmt(Number(e.amount))}원</span> : null}
                     </div>
                     {e.memo && (
-                      <div
-                        className="text-text-muted"
-                        style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                      >
-                        {e.memo}
-                      </div>
+                      <div className="text-text-muted truncate">{e.memo}</div>
                     )}
                   </div>
                 </div>
