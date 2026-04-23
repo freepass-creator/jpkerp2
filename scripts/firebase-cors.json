@@ -1,0 +1,31 @@
+[
+  {
+    "origin": [
+      "http://localhost:7401",
+      "http://localhost:3000",
+      "http://192.168.45.231:7401",
+      "https://www.jpkerp.com",
+      "https://jpkerp.com",
+      "https://*.vercel.app"
+    ],
+    "method": ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"],
+    "maxAgeSeconds": 3600,
+    "responseHeader": [
+      "Content-Type",
+      "Content-Length",
+      "Authorization",
+      "X-Requested-With",
+      "X-Goog-Upload-Chunk-Granularity",
+      "X-Goog-Upload-Command",
+      "X-Goog-Upload-Content-Length",
+      "X-Goog-Upload-Content-Type",
+      "X-Goog-Upload-Header-Content-Encoding",
+      "X-Goog-Upload-Header-Content-Type",
+      "X-Goog-Upload-Offset",
+      "X-Goog-Upload-Protocol",
+      "X-Goog-Upload-Size-Received",
+      "X-Goog-Upload-Status",
+      "X-Goog-Upload-URL"
+    ]
+  }
+]
