@@ -51,7 +51,7 @@ export function InputFormShell({ collection, buildPayload, afterSave, onSaved, v
         customers: { field: 'customer_code', prefix: 'CU' },
         assets: { field: 'asset_code', prefix: 'AS' },
         contracts: { field: 'contract_code', prefix: 'CT' },
-        partners: { field: 'partner_code', prefix: 'PT' },
+        partners: { field: 'partner_code', prefix: 'CP' },
         vendors: { field: 'vendor_code', prefix: 'VD' },
         gps_devices: { field: 'gps_code', prefix: 'GP' },
         loans: { field: 'loan_code', prefix: 'LN' },
