@@ -143,7 +143,7 @@ export function PartnerCreateForm() {
         </div>
         <div className="text-2xs text-text-muted" style={{ marginTop: 8 }}>
           <i className="ph ph-info" style={{ marginRight: 4 }} />
-          회원사 코드(PT00000)는 저장 시 자동 생성됩니다
+          회사코드(CP01~CP99)는 저장 시 자동 생성됩니다
         </div>
       </div>
 
