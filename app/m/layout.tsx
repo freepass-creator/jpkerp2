@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import { useAuth } from '@/lib/auth/context';
 
 // 모바일 레이아웃 — AuthProvider/Toaster 는 root Providers 에서 이미 주입됨 (중복 금지)
 
@@ -14,6 +16,29 @@ const TABS: Array<{ href: string; icon: string; label: string }> = [
 
 export default function MobileLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, loading } = useAuth();
+
+  // 비로그인 → /login 리다이렉트 (Firebase Storage/RTDB 쓰기는 인증 필수)
+  useEffect(() => {
+    if (!loading && !user) {
+      const next = encodeURIComponent(pathname);
+      router.replace(`/login?redirect=${next}`);
+    }
+  }, [user, loading, pathname, router]);
+
+  if (loading || !user) {
+    return (
+      <div className="m-shell">
+        <main className="m-main" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="text-text-muted" style={{ fontSize: 13 }}>
+            <i className="ph ph-spinner spin" style={{ marginRight: 6 }} />
+            {loading ? '로그인 확인 중…' : '로그인 필요 — 이동 중'}
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="m-shell">

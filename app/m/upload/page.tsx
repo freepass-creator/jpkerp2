@@ -1,50 +1,78 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { ref as rtdbRef, push, set, serverTimestamp } from 'firebase/database';
+import { ref as storageRef, uploadBytesResumable, getDownloadURL, getStorage } from 'firebase/storage';
+import { ref as rtdbRef, push, set as rtdbSet, serverTimestamp } from 'firebase/database';
+import { getFirebaseApp } from '@/lib/firebase/client';
 import { getRtdb } from '@/lib/firebase/rtdb';
-import { uploadFiles } from '@/lib/firebase/storage';
 import { CarNumberPicker } from '@/components/form/car-number-picker';
 import { useAuth } from '@/lib/auth/context';
 import { useSaveStore } from '@/lib/hooks/useSaveStatus';
 import { sanitizeCarNumber } from '@/lib/format-input';
 import { useRecentCars } from '@/lib/hooks/useRecentCars';
 import { useAssetByCar, useContractByCar } from '@/lib/hooks/useLookups';
-import { resizeImages } from '@/lib/image-resize';
+import { saveEvent } from '@/lib/firebase/events';
+import { resizeImage } from '@/lib/image-resize';
 
-interface PreviewItem {
-  file: File;
-  url: string;
-}
-
-const MAX_FILES = 10;
-
-// 현장 업로드 카테고리 — 출고·반납·상품화·업로드 4종
-const KINDS = [
+const CATS = [
   { k: 'delivery', label: '출고',   icon: 'ph-truck',             tint: 'var(--c-success)' },
   { k: 'return',   label: '반납',   icon: 'ph-arrow-u-down-left', tint: 'var(--c-info)' },
   { k: 'product',  label: '상품화', icon: 'ph-sparkle',           tint: 'var(--c-primary)' },
-  { k: 'other',    label: '업로드', icon: 'ph-paperclip',         tint: 'var(--c-text-sub)' },
 ] as const;
-type Kind = typeof KINDS[number]['k'];
+type Cat = typeof CATS[number]['k'];
+
+const MAX_PARALLEL = 3;
+const MAX_FILES = 20;
+
+interface PreviewItem {
+  id: string;
+  file: File;
+  url: string;       // blob preview (image only)
+  isImage: boolean;
+  progress: number;  // 0~100 업로드 시
+  error?: string;
+}
+
+interface UploadResult {
+  url: string;
+  path: string;
+  name: string;
+  content_type: string;
+  size: number;
+  taken_at: number;
+}
+
+function getStore() { return getStorage(getFirebaseApp()); }
+function pad(n: number) { return String(n).padStart(2, '0'); }
+function stampNow() {
+  const d = new Date();
+  return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+function encodeKey(s: string) { return String(s).replace(/[.#$\[\]\/]/g, '_'); }
 
 export default function MobileUpload() {
   const { user } = useAuth();
-  const [carNumber, setCarNumber] = useState('');
-  const [kind, setKind] = useState<Kind | null>(null);
-  const [items, setItems] = useState<PreviewItem[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [detecting, setDetecting] = useState(false);
-  // OCR 감지 결과 — 사용자 확인 전 후보로 보여줌
-  const [detected, setDetected] = useState<string | null>(null);
-
   const recent = useRecentCars();
+  const [carNumber, setCarNumber] = useState('');
   const cn = useMemo(() => sanitizeCarNumber(carNumber), [carNumber]);
   const matchedAsset = useAssetByCar(cn);
   const matchedContract = useContractByCar(cn, { activeOnly: true, requireContractor: true });
 
-  // 계약 상태 pill — 실제 contract_status 노출, 없으면 휴차
+  const [kind, setKind] = useState<Cat | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [items, setItems] = useState<PreviewItem[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  const camRef = useRef<HTMLInputElement | null>(null);
+  const galleryRef = useRef<HTMLInputElement | null>(null);
+
+  const hasCar = !!cn;
+  const hasFiles = items.length > 0;
+  // 차량번호 선택은 선택사항 — 없어도 업로드 가능 (미등록은 mobile_uploads 스테이징으로)
+  const canUpload = hasFiles && kind !== null && !busy;
+
+  // 계약상태 pill
   const statusLabel = matchedContract?.contract_status ?? (matchedAsset ? '휴차' : '—');
   const statusTone: 'success' | 'warn' | 'danger' | 'neutral' =
     statusLabel === '계약진행' ? 'success'
@@ -52,298 +80,333 @@ export default function MobileUpload() {
     : statusLabel === '휴차' ? 'warn'
     : 'neutral';
 
-  const match = cn ? { cn, asset: matchedAsset, contract: matchedContract } : null;
-  const hasCar = !!match;
+  const modelLine = matchedAsset
+    ? [matchedAsset.manufacturer, matchedAsset.detail_model ?? matchedAsset.car_model, matchedAsset.car_year].filter(Boolean).join(' ')
+    : '';
 
-  // 차량번호 자동 감지 — 매 호출마다 이전 후보 클리어 후 새 OCR
-  const detectPlate = useCallback(async (file: File) => {
-    const isImage = file.type.startsWith('image/');
-    const isPdf = file.type === 'application/pdf';
-    if (!isImage && !isPdf) return;
-    setDetected(null); // 이전 감지 결과 즉시 제거
-    setDetecting(true);
-    try {
-      const fd = new FormData();
-      fd.append('type', 'plate');
-      fd.append('file', file);
-      const res = await fetch('/api/ocr/extract', { method: 'POST', body: fd });
-      const json = await res.json();
-      const plate = sanitizeCarNumber(json?.extracted?.car_number ?? '');
-      const confidence = String(json?.extracted?.confidence ?? 'low');
-      if (plate && confidence !== 'low') {
-        setDetected(plate);
-      }
-    } catch {
-      // 실패해도 사용자 수동 선택으로 진행
-    } finally {
-      setDetecting(false);
+  const reset = useCallback(() => {
+    items.forEach((i) => { if (i.url) URL.revokeObjectURL(i.url); });
+    setItems([]);
+    setKind(null);
+  }, [items]);
+
+  const onCatClick = useCallback((cat: Cat) => {
+    if (hasFiles && kind !== null && kind !== cat) {
+      if (!confirm('업무 구분을 바꾸면 선택한 사진이 초기화됩니다. 진행할까요?')) return;
+      reset();
     }
+    setKind(cat);
+    setSheetOpen(true);
+  }, [hasFiles, kind, reset]);
+
+  const closeSheet = useCallback(() => setSheetOpen(false), []);
+
+  const onSheetAction = useCallback((act: 'camera' | 'gallery') => {
+    setSheetOpen(false);
+    const ref = act === 'camera' ? camRef : galleryRef;
+    const inp = ref.current;
+    if (!inp) return;
+    inp.value = '';
+    inp.click();
   }, []);
 
-  const onPick = useCallback((files: FileList | null, pickedKind: Kind = 'delivery') => {
-    if (!files || files.length === 0) return;
-    const arr = Array.from(files);
-    let ocrCandidate: File | null = null;
+  const onFilesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (picked.length === 0) return;
     setItems((prev) => {
       const remaining = MAX_FILES - prev.length;
       if (remaining <= 0) { toast.error(`최대 ${MAX_FILES}장까지`); return prev; }
-      const add = arr.slice(0, remaining).map((file) => ({ file, url: URL.createObjectURL(file) }));
-      if (arr.length > remaining) toast.warning(`${remaining}장만 추가됨 (최대 ${MAX_FILES})`);
-      // 첫 등장시 kind 기본값
-      if (prev.length === 0 && !kind) setKind(pickedKind);
-      // 차량 미확정 상태면 방금 추가된 이미지/PDF로 OCR 재시도
-      if (!carNumber) {
-        ocrCandidate = add.find((i) =>
-          i.file.type.startsWith('image/') || i.file.type === 'application/pdf'
-        )?.file ?? null;
-      }
+      const add = picked.slice(0, remaining).map((f, i) => {
+        const isImage = f.type.startsWith('image/');
+        return {
+          id: `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 5)}`,
+          file: f,
+          url: isImage ? URL.createObjectURL(f) : '',
+          isImage,
+          progress: 0,
+        };
+      });
+      if (picked.length > remaining) toast.warning(`${remaining}장만 추가됨 (최대 ${MAX_FILES})`);
       return [...prev, ...add];
-    });
-    // setItems 밖에서 OCR 트리거 (상태 업데이트 중 side-effect 회피)
-    if (ocrCandidate) detectPlate(ocrCandidate);
-  }, [carNumber, kind, detectPlate]);
-
-  const removeItem = useCallback((idx: number) => {
-    setItems((prev) => {
-      URL.revokeObjectURL(prev[idx].url);
-      return prev.filter((_, i) => i !== idx);
     });
   }, []);
 
-  const reset = useCallback(() => {
-    items.forEach((i) => URL.revokeObjectURL(i.url));
-    setItems([]);
-    setCarNumber('');
-    setKind(null);
-    setDetected(null);
-  }, [items]);
+  const removeItem = useCallback((id: string) => {
+    setItems((prev) => {
+      const target = prev.find((i) => i.id === id);
+      if (target?.url) URL.revokeObjectURL(target.url);
+      return prev.filter((i) => i.id !== id);
+    });
+  }, []);
+
+  // 파일 1건 업로드 (진행률 반영)
+  const uploadOne = useCallback(async (item: PreviewItem, cat: Cat, carSafe: string): Promise<UploadResult | null> => {
+    const ts = Date.now();
+    const rand = Math.random().toString(36).slice(2, 6);
+    const ext = (item.file.name.split('.').pop() || (item.isImage ? 'jpg' : 'bin')).toLowerCase();
+    const path = `photos/${cat}/${carSafe}/${stampNow()}_${rand}.${ext}`;
+    try {
+      const toUpload = await resizeImage(item.file);
+      const task = uploadBytesResumable(storageRef(getStore(), path), toUpload, {
+        contentType: toUpload.type || undefined,
+      });
+      const url: string = await new Promise((resolve, reject) => {
+        task.on('state_changed',
+          (snap) => {
+            const pct = Math.max(1, Math.round((snap.bytesTransferred / snap.totalBytes) * 100));
+            setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, progress: pct } : i));
+          },
+          reject,
+          async () => { try { resolve(await getDownloadURL(task.snapshot.ref)); } catch (e) { reject(e); } },
+        );
+      });
+      return { url, path, name: item.file.name, content_type: item.file.type || '', size: toUpload.size, taken_at: ts };
+    } catch (e) {
+      setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, error: (e as Error).message } : i));
+      return null;
+    }
+  }, []);
 
   const submit = useCallback(async () => {
-    const cn = sanitizeCarNumber(carNumber);
-    if (items.length === 0) { toast.error('사진·파일을 선택하세요'); return; }
-    // '업로드(other)' 외엔 차량번호 필수
-    const requiresCar = kind !== 'other';
-    if (requiresCar && !cn) { toast.error('차량번호를 입력하세요'); return; }
-
+    if (!canUpload || !kind) return;
     setBusy(true);
-    const store = useSaveStore.getState();
-    store.begin('업로드 중');
-    try {
-      const basePath = cn ? `mobile_uploads/${cn}` : 'mobile_uploads/_no_car';
-      // 이미지만 리사이징 (2048px·JPEG 0.85) — 비이미지는 원본 유지
-      const prepared = await resizeImages(items.map((i) => i.file));
-      const urls = await uploadFiles(basePath, prepared);
+    const save = useSaveStore.getState();
+    const kindLabel = CATS.find((c) => c.k === kind)?.label ?? '';
+    save.begin(`${kindLabel} 업로드 중`);
 
-      const db = getRtdb();
-      const ref = push(rtdbRef(db, 'mobile_uploads'));
-      await set(ref, {
-        car_number: cn || null,
-        partner_code: match?.asset?.partner_code ?? null,
-        kind,
-        file_urls: urls,
-        file_count: urls.length,
-        uploader_uid: user?.uid ?? null,
-        uploader_name: user?.displayName ?? user?.email ?? null,
-        device: 'mobile',
-        status: 'pending',
-        created_at: serverTimestamp(),
-      });
-      if (cn) recent.push(cn);
-      store.success('업로드 완료');
-      toast.success(`${urls.length}장 업로드 완료`);
+    const carSafe = cn ? encodeKey(cn) : '_no_car';
+    const queue = [...items];
+    const results: UploadResult[] = [];
+    const workers = Array.from({ length: Math.min(MAX_PARALLEL, queue.length) }, async () => {
+      while (queue.length) {
+        const it = queue.shift();
+        if (!it) break;
+        const r = await uploadOne(it, kind, carSafe);
+        if (r) results.push(r);
+      }
+    });
+    await Promise.all(workers);
+
+    if (results.length === 0) {
+      save.fail('전부 실패');
+      toast.error('업로드 실패');
+      setBusy(false);
+      return;
+    }
+
+    try {
+      if (cn) {
+        // 차량번호 확정 → events 직접 저장
+        const today = new Date().toISOString().slice(0, 10);
+        await saveEvent({
+          type: kind,
+          date: today,
+          car_number: cn,
+          partner_code: matchedAsset?.partner_code,
+          contract_code: matchedContract?.contract_code,
+          customer_name: matchedContract?.contractor_name,
+          customer_phone: matchedContract?.contractor_phone,
+          title: `${kindLabel} (${results.length}장)`,
+          photo_urls: results.map((r) => r.url),
+          handler_uid: user?.uid,
+          handler: user?.displayName ?? user?.email ?? undefined,
+          source: 'mobile',
+        });
+        recent.push(cn);
+        save.success('업로드 완료');
+        toast.success(`${kindLabel} ${results.length}장 등록`);
+      } else {
+        // 차량번호 없음 → mobile_uploads 스테이징 (미결업무, 관리자 inbox에서 매칭)
+        const db = getRtdb();
+        const r = push(rtdbRef(db, 'mobile_uploads'));
+        await rtdbSet(r, {
+          car_number: null,
+          kind,
+          file_urls: results.map((u) => u.url),
+          file_count: results.length,
+          uploader_uid: user?.uid ?? null,
+          uploader_name: user?.displayName ?? user?.email ?? null,
+          device: 'mobile',
+          status: 'pending',
+          matched: false,
+          created_at: serverTimestamp(),
+        });
+        save.success('미결업무 등록');
+        toast.success(`미결업무로 ${results.length}장 등록 — 관리자 매칭 대기`);
+      }
       reset();
-    } catch (err) {
-      store.fail((err as Error).message);
-      toast.error(`업로드 실패: ${(err as Error).message}`);
+    } catch (e) {
+      save.fail((e as Error).message);
+      toast.error(`저장 실패: ${(e as Error).message}`);
     } finally {
       setBusy(false);
     }
-  }, [carNumber, items, kind, user, match, recent, reset]);
+  }, [canUpload, kind, cn, items, matchedAsset, matchedContract, user, uploadOne, recent, reset]);
 
-  // 단계 판정 — 진행형 노출
-  const noFiles = items.length === 0;
-  const canSubmit = !noFiles && (hasCar || kind === 'other');
+  // unmount cleanup
+  useEffect(() => {
+    return () => { items.forEach((i) => { if (i.url) URL.revokeObjectURL(i.url); }); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <>
-      {/* 메인 영역 — 하단 dock(차량검색)+submit+tabbar 높이 확보 */}
-      <div className="m-up-scroll">
-        {/* Step 0: 파일 선택 전 — 큰 업로드 버튼 하나 */}
-        {noFiles ? (
-          <div className="m-up-empty-hint">
-            <i className="ph ph-arrow-down" />
-            <span>아래 <b>사진</b> 또는 <b>파일</b> 을 눌러 업로드 시작</span>
+    <div className="m-up-v1">
+      {/* ① 차량번호 입력 — 맨 위 */}
+      <div className="m-picker">
+        <CarNumberPicker
+          value={carNumber}
+          onChange={setCarNumber}
+          placeholder="🔍 차량번호·회원사·모델 검색"
+          showCreate={false}
+          showAllOnEmpty
+          limit={50}
+        />
+      </div>
+      {recent.list.length > 0 && (
+        <div className="m-up-recent">
+          {recent.list.slice(0, 8).map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCarNumber(c)}
+              className={`m-up-chip ${carNumber === c ? 'is-active' : ''}`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ② 차량 정보 카드 */}
+      <div className={`m-up-hdr ${hasCar ? 'is-active' : 'is-empty'}`}>
+        {!hasCar ? (
+          <div className="m-up-hdr-row">
+            <i className="ph ph-car text-text-muted" />
+            <span className="text-text-muted">위에서 차량번호를 선택하세요</span>
           </div>
+        ) : matchedAsset ? (
+          <>
+            <div className="m-up-hdr-row">
+              <span className="m-up-hdr-num">{matchedAsset.car_number}</span>
+              <span className={`jpk-pill tone-${statusTone}`} style={{ marginLeft: 'auto' }}>
+                {statusLabel}
+              </span>
+            </div>
+            <dl className="m-up-hdr-rows">
+              {matchedAsset.partner_code && (
+                <div><dt>회원사</dt><dd>{matchedAsset.partner_code}</dd></div>
+              )}
+              <div>
+                <dt>세부모델</dt>
+                <dd>{modelLine || '—'}</dd>
+              </div>
+              {matchedContract?.contractor_name && (
+                <div><dt>계약자</dt><dd>{matchedContract.contractor_name}</dd></div>
+              )}
+            </dl>
+          </>
         ) : (
           <>
-            <div className="m-up-count">
-              <b>{items.length}개</b> 선택됨
+            <div className="m-up-hdr-row">
+              <span className="m-up-hdr-num">{cn}</span>
+              <span className="jpk-pill tone-warn" style={{ marginLeft: 'auto' }}>미등록</span>
             </div>
-
-            {/* 작은 썸네일 스크롤 리스트 */}
-            <div className="m-up-thumbs-mini">
-              {items.map((it, idx) => (
-                <div key={idx} className="m-up-thumb-mini">
-                  {it.file.type.startsWith('image/') ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={it.url} alt="" />
-                  ) : (
-                    <div className="m-up-thumb-file"><i className="ph ph-file-pdf" /></div>
-                  )}
-                  <button type="button" onClick={() => removeItem(idx)} className="m-up-thumb-del-mini" aria-label="삭제">
-                    <i className="ph ph-x" />
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {/* 감지 중 / 감지 후보 안내 */}
-            {!hasCar && (
-              detecting ? (
-                <div className="m-up-prompt">
-                  <i className="ph ph-spinner spin" />
-                  <span>사진에서 <b>차량번호</b> 자동인식 중…</span>
-                </div>
-              ) : detected ? (
-                <div className="m-up-detect">
-                  <div className="m-up-detect-head">
-                    <i className="ph-fill ph-sparkle" />
-                    <span>자동 감지된 차량번호</span>
-                  </div>
-                  <div className="m-up-detect-plate">{detected}</div>
-                  <div className="m-up-detect-actions">
-                    <button type="button" className="m-up-detect-cancel" onClick={() => setDetected(null)}>
-                      <i className="ph ph-x" /> 아니요
-                    </button>
-                    <button
-                      type="button"
-                      className="m-up-detect-ok"
-                      onClick={() => { setCarNumber(detected); setDetected(null); }}
-                    >
-                      <i className="ph ph-check" /> 이 차량 맞아요
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="m-up-prompt">
-                  <i className="ph-fill ph-arrow-down" />
-                  <span>아래에서 <b>차량번호</b>를 선택하세요</span>
-                </div>
-              )
-            )}
-
-            {/* 차량 확정 후 — 카드 (매칭 성공/실패 모두) */}
-            {hasCar && matchedAsset && (
-              <div className="m-up-car">
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="m-up-car-head">
-                    <span className="m-up-car-num">{matchedAsset.car_number}</span>
-                    <span className={`jpk-pill tone-${statusTone}`}>{statusLabel}</span>
-                  </div>
-                  <dl className="m-up-car-rows">
-                    {matchedAsset.partner_code && (
-                      <div><dt>회원사</dt><dd>{matchedAsset.partner_code}</dd></div>
-                    )}
-                    <div>
-                      <dt>세부모델</dt>
-                      <dd>
-                        {[matchedAsset.manufacturer, matchedAsset.detail_model ?? matchedAsset.car_model, matchedAsset.car_year]
-                          .filter(Boolean).join(' ') || '—'}
-                      </dd>
-                    </div>
-                    {matchedContract?.contractor_name && (
-                      <div>
-                        <dt>계약자</dt>
-                        <dd>{matchedContract.contractor_name}</dd>
-                      </div>
-                    )}
-                  </dl>
-                </div>
-              </div>
-            )}
-            {hasCar && !matchedAsset && (
-              <div className="m-up-car m-up-car--warn">
-                <i className="ph-fill ph-warning-circle" style={{ fontSize: 20, color: 'var(--c-warn)' }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="m-up-car-num">{match!.cn}</div>
-                  <div className="text-xs text-warn">등록되지 않은 차량 · 업로드 후 관리자 등록</div>
-                </div>
-              </div>
-            )}
-
+            <div className="m-up-hdr-meta">업로드 후 관리자가 자산 등록합니다</div>
           </>
         )}
       </div>
 
-      {/* ── 하단 dock — 위↓: 업로드 / 차량검색 / 사진·파일 picker (최하단 고정) ── */}
-      <div className="m-up-dock">
-        {canSubmit && (
-          <button
-            type="button"
-            onClick={submit}
-            disabled={busy}
-            className="m-up-submit-btn"
-          >
-            <i className={`ph ${busy ? 'ph-spinner spin' : 'ph-cloud-arrow-up'}`} />
-            {busy ? '업로드 중' : `${items.length}장 업로드`}
-          </button>
-        )}
-        {!noFiles && !hasCar && !detected && !detecting && (
-          <>
-            {recent.list.length > 0 && (
-              <div className="m-up-dock-recent">
-                <span className="text-2xs text-text-muted">최근</span>
-                {recent.list.slice(0, 8).map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setCarNumber(c)}
-                    className={`m-up-chip ${carNumber === c ? 'is-active' : ''}`}
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="m-picker m-up-dock-search">
-              <CarNumberPicker
-                value={carNumber}
-                onChange={(v) => { setCarNumber(v); setDetected(null); }}
-                placeholder="차량번호·회원사·모델 검색"
-                showCreate={false}
-                dropUp
-                showAllOnEmpty
-                limit={50}
-              />
+      {/* ③ 3 카테고리 버튼 */}
+      <div className="m-up-cats">
+        {CATS.map(({ k, label, icon, tint }) => {
+          const selected = kind === k;
+          return (
+            <button
+              key={k}
+              type="button"
+              className={`m-up-cat ${!hasCar ? 'is-dim' : ''} ${selected ? 'is-selected' : ''}`}
+              style={{ ['--cat-tint' as string]: tint }}
+              onClick={() => onCatClick(k)}
+              disabled={busy}
+            >
+              <span className="m-up-cat-icon">
+                <i className={`ph-fill ${icon}`} />
+              </span>
+              <span className="m-up-cat-label">{label}</span>
+              {selected && hasFiles && <span className="m-up-cat-count">{items.length}장</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ④ 썸네일 그리드 */}
+      {hasFiles && (
+        <div className="m-up-thumbs">
+          {items.map((it) => (
+            <div key={it.id} className={`m-up-thumb ${it.error ? 'is-err' : ''}`}>
+              {it.isImage && it.url
+                /* eslint-disable-next-line @next/next/no-img-element */
+                ? <img src={it.url} alt="" />
+                : <div className="m-up-thumb-file"><i className="ph ph-file" /></div>}
+              {it.progress > 0 && it.progress < 100 && (
+                <div className="m-up-thumb-bar" style={{ width: `${it.progress}%` }} />
+              )}
+              {it.progress > 0 && (
+                <span className="m-up-thumb-pct">
+                  {it.error ? '실패' : `${it.progress}%`}
+                </span>
+              )}
+              {!busy && (
+                <button type="button" className="m-up-thumb-del" onClick={() => removeItem(it.id)} aria-label="삭제">
+                  <i className="ph ph-x" />
+                </button>
+              )}
             </div>
-          </>
-        )}
-        {/* 최하단: 파일 · 사진 picker — 좌=파일(업로드), 우=사진(출고 기본) */}
-        <div className="m-up-pickers">
-          <label className="m-up-pick-btn">
-            <input
-              type="file"
-              accept="application/pdf,.doc,.docx,.xls,.xlsx,.hwp,.hwpx"
-              multiple
-              hidden
-              onChange={(e) => { onPick(e.target.files, 'other'); e.target.value = ''; }}
-            />
-            <i className="ph-fill ph-file-text" />
-            <span>파일</span>
-          </label>
-          <label className="m-up-pick-btn">
-            <input
-              type="file"
-              accept="image/*,video/*"
-              multiple
-              hidden
-              onChange={(e) => { onPick(e.target.files, 'delivery'); e.target.value = ''; }}
-            />
-            <i className="ph-fill ph-images" />
-            <span>사진</span>
-          </label>
+          ))}
         </div>
-      </div>
-    </>
+      )}
+
+      {/* 숨은 file input */}
+      <input ref={camRef} type="file" accept="image/*" capture="environment" hidden onChange={onFilesChange} />
+      <input ref={galleryRef} type="file" accept="image/*,video/*" multiple hidden onChange={onFilesChange} />
+
+      {/* 하단 고정 dock — 초기화 · 업로드 (탭바 바로 위) */}
+      {hasFiles && (
+        <div className="m-up-dock">
+          <button type="button" className="m-up-reset" onClick={reset} disabled={busy}>
+            <i className="ph ph-arrow-counter-clockwise" />초기화
+          </button>
+          <button type="button" className="m-up-submit" onClick={submit} disabled={!canUpload}>
+            <i className={`ph ${busy ? 'ph-spinner spin' : 'ph-cloud-arrow-up'}`} />
+            {busy
+              ? '업로드 중'
+              : cn
+                ? `${items.length}장 업로드`
+                : `미결업무로 ${items.length}장 올림`}
+          </button>
+        </div>
+      )}
+
+      {/* 액션시트 */}
+      {sheetOpen && (
+        <>
+          <div className="m-sheet-overlay" onClick={closeSheet} />
+          <div className="m-sheet">
+            <div className="m-sheet-handle" />
+            <div className="m-sheet-title">
+              {kind ? CATS.find((c) => c.k === kind)?.label : ''} — 업로드 방법
+            </div>
+            <button type="button" className="m-sheet-btn" onClick={() => onSheetAction('camera')}>
+              <i className="ph ph-camera" />카메라 촬영
+            </button>
+            <button type="button" className="m-sheet-btn" onClick={() => onSheetAction('gallery')}>
+              <i className="ph ph-images" />앨범에서 선택
+            </button>
+            <button type="button" className="m-sheet-btn m-sheet-cancel" onClick={closeSheet}>취소</button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
