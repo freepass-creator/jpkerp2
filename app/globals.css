@@ -1308,36 +1308,47 @@ a:focus-visible,
   min-height: calc(100vh - 60px - 220px); /* tabbar + dock 공간 제외, 기본 차림 */
 }
 
-/* Step 0: 큰 업로드 시작 버튼 */
-.m-up-start {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
+/* 빈 상태 안내 — 하단 picker 향해 화살표 */
+.m-up-empty-hint {
+  display: flex; align-items: center; justify-content: center;
   gap: 8px;
   padding: 48px 20px;
-  background: var(--c-surface);
-  border: 2px dashed var(--c-border-strong);
-  border-radius: var(--r-sm);
-  cursor: pointer;
   flex: 1;
-  min-height: 280px;
-  transition: border-color .12s, background .12s;
-}
-.m-up-start:active {
-  border-color: var(--c-primary);
-  background: var(--c-primary-bg);
-}
-.m-up-start > i.ph-fill {
-  font-size: 56px;
-  color: var(--c-primary);
-}
-.m-up-start-title {
-  font-size: 17px; font-weight: 700;
-  color: var(--c-text);
+  min-height: 200px;
+  color: var(--c-text-muted);
+  font-size: 13px;
   letter-spacing: -0.02em;
 }
-.m-up-start-sub {
+.m-up-empty-hint > i.ph { font-size: 20px; opacity: 0.6; }
+.m-up-empty-hint b { color: var(--c-primary); font-weight: 700; }
+
+/* 파일 카운트 */
+.m-up-count {
+  padding: 6px 2px;
   font-size: 12px;
-  color: var(--c-text-muted);
+  color: var(--c-text-sub);
+  letter-spacing: -0.02em;
 }
+.m-up-count b { font-size: 14px; color: var(--c-text); font-weight: 800; margin-right: 3px; }
+
+/* 최하단 사진·파일 picker 2칸 */
+.m-up-pickers {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+}
+.m-up-pick-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 44px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  color: var(--c-text);
+  font-size: 13px; font-weight: 700;
+  letter-spacing: -0.02em;
+  cursor: pointer;
+  font-family: inherit;
+}
+.m-up-pick-btn:active { background: var(--c-bg-hover); border-color: var(--c-primary); }
+.m-up-pick-btn > i.ph-fill { font-size: 16px; color: var(--c-primary); }
 
 /* Step 프롬프트 (차량/업무 선택 안내) */
 .m-up-prompt {
@@ -1401,17 +1412,84 @@ a:focus-visible,
   letter-spacing: -0.03em; color: var(--c-text);
   line-height: 1.15;
 }
-.m-up-auto-badge {
-  display: inline-flex; align-items: center; gap: 4px;
-  height: 20px;
-  padding: 0 8px;
+/* 작은 썸네일 리스트 — 5칸 그리드 + 스크롤 (최대 높이 제한) */
+.m-up-thumbs-mini {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  max-height: 132px;
+  overflow-y: auto;
+  padding: 2px;
+  background: var(--c-bg-sub);
   border-radius: var(--r-sm);
+}
+.m-up-thumb-mini {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: var(--c-surface);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+.m-up-thumb-mini > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.m-up-thumb-mini .m-up-thumb-file {
+  display: flex; align-items: center; justify-content: center; height: 100%;
+}
+.m-up-thumb-mini .m-up-thumb-file > i.ph { font-size: 20px; color: var(--c-text-muted); }
+.m-up-thumb-del-mini {
+  position: absolute; top: 1px; right: 1px;
+  width: 18px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.6); color: #fff;
+  border: none; border-radius: var(--r-sm);
+  cursor: pointer; padding: 0;
+}
+.m-up-thumb-del-mini > i.ph { font-size: 10px; }
+
+/* 자동 감지된 차량번호 후보 배너 (사용자 확인 전) */
+.m-up-detect {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 14px;
   background: var(--c-primary-bg);
+  border: 1px solid var(--c-primary);
+  border-radius: var(--r-sm);
+}
+.m-up-detect-head {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700;
   color: var(--c-primary);
-  font-size: 10px; font-weight: 700;
   letter-spacing: -0.02em;
 }
-.m-up-auto-badge > i.ph-fill { font-size: 10px; }
+.m-up-detect-head > i.ph-fill { font-size: 14px; }
+.m-up-detect-plate {
+  font-size: 28px; font-weight: 800;
+  color: var(--c-text);
+  letter-spacing: -0.03em;
+  text-align: center;
+  padding: 6px 0 4px;
+}
+.m-up-detect-actions {
+  display: grid; grid-template-columns: 1fr 2fr; gap: 6px;
+}
+.m-up-detect-cancel,
+.m-up-detect-ok {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  height: 40px;
+  border-radius: var(--r-sm);
+  font-size: 13px; font-weight: 700;
+  letter-spacing: -0.02em;
+  cursor: pointer;
+  font-family: inherit;
+}
+.m-up-detect-cancel {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  color: var(--c-text-sub);
+}
+.m-up-detect-ok {
+  background: var(--c-primary);
+  border: none;
+  color: #fff;
+}
 
 .m-up-car-rows {
   margin: 8px 0 0;

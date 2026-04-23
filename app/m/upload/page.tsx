@@ -35,7 +35,8 @@ export default function MobileUpload() {
   const [items, setItems] = useState<PreviewItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [detecting, setDetecting] = useState(false);
-  const [autoDetected, setAutoDetected] = useState(false); // OCR이 자동 채웠는지 표시용
+  // OCR 감지 결과 — 사용자 확인 전 후보로 보여줌
+  const [detected, setDetected] = useState<string | null>(null);
 
   const recent = useRecentCars();
   const cn = useMemo(() => sanitizeCarNumber(carNumber), [carNumber]);
@@ -53,9 +54,11 @@ export default function MobileUpload() {
   const match = cn ? { cn, asset: matchedAsset, contract: matchedContract } : null;
   const hasCar = !!match;
 
-  // 차량번호 자동 감지 — 첫 이미지 Gemini OCR → 성공시 carNumber 자동 채움
+  // 차량번호 자동 감지 — 첫 파일(이미지/PDF) Gemini OCR → 후보로 저장, 사용자 확인 후 반영
   const detectPlate = useCallback(async (file: File) => {
-    if (!file.type.startsWith('image/')) return;
+    const isImage = file.type.startsWith('image/');
+    const isPdf = file.type === 'application/pdf';
+    if (!isImage && !isPdf) return;
     setDetecting(true);
     try {
       const fd = new FormData();
@@ -66,9 +69,7 @@ export default function MobileUpload() {
       const plate = sanitizeCarNumber(json?.extracted?.car_number ?? '');
       const confidence = String(json?.extracted?.confidence ?? 'low');
       if (plate && confidence !== 'low') {
-        setCarNumber(plate);
-        setAutoDetected(true);
-        toast.success(`차량번호 자동감지: ${plate}`);
+        setDetected(plate);
       }
     } catch {
       // 실패해도 사용자 수동 선택으로 진행
@@ -85,10 +86,12 @@ export default function MobileUpload() {
       if (remaining <= 0) { toast.error(`최대 ${MAX_FILES}장까지`); return prev; }
       const add = arr.slice(0, remaining).map((file) => ({ file, url: URL.createObjectURL(file) }));
       if (arr.length > remaining) toast.warning(`${remaining}장만 추가됨 (최대 ${MAX_FILES})`);
-      // 첫 등장 + 차량 미입력시에만 자동 감지 1회
+      // 첫 등장 + 차량 미입력시에만 자동 감지 1회 (이미지 or PDF)
       if (prev.length === 0 && !carNumber) {
-        const firstImage = add.find((i) => i.file.type.startsWith('image/'));
-        if (firstImage) detectPlate(firstImage.file);
+        const ocrTarget = add.find((i) =>
+          i.file.type.startsWith('image/') || i.file.type === 'application/pdf'
+        );
+        if (ocrTarget) detectPlate(ocrTarget.file);
       }
       return [...prev, ...add];
     });
@@ -106,7 +109,7 @@ export default function MobileUpload() {
     setItems([]);
     setCarNumber('');
     setKind(null);
-    setAutoDetected(false);
+    setDetected(null);
   }, [items]);
 
   const submit = useCallback(async () => {
@@ -162,81 +165,74 @@ export default function MobileUpload() {
       <div className="m-up-scroll">
         {/* Step 0: 파일 선택 전 — 큰 업로드 버튼 하나 */}
         {noFiles ? (
-          <label className="m-up-start">
-            <input
-              type="file"
-              accept="image/*,application/pdf"
-              multiple
-              hidden
-              onChange={(e) => { onPick(e.target.files); e.target.value = ''; }}
-            />
-            <i className="ph-fill ph-cloud-arrow-up" />
-            <div className="m-up-start-title">사진·파일 업로드</div>
-            <div className="m-up-start-sub">탭해서 사진·파일 선택</div>
-          </label>
+          <div className="m-up-empty-hint">
+            <i className="ph ph-arrow-down" />
+            <span>아래 <b>사진</b> 또는 <b>파일</b> 을 눌러 업로드 시작</span>
+          </div>
         ) : (
           <>
-            {/* 썸네일 */}
-            <div className="m-up-thumbs">
+            <div className="m-up-count">
+              <b>{items.length}개</b> 선택됨
+            </div>
+
+            {/* 작은 썸네일 스크롤 리스트 */}
+            <div className="m-up-thumbs-mini">
               {items.map((it, idx) => (
-                <div key={idx} className="m-up-thumb">
+                <div key={idx} className="m-up-thumb-mini">
                   {it.file.type.startsWith('image/') ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={it.url} alt="" />
                   ) : (
-                    <div className="m-up-thumb-file">
-                      <i className="ph ph-file-pdf" />
-                      <div className="m-up-thumb-name">{it.file.name}</div>
-                    </div>
+                    <div className="m-up-thumb-file"><i className="ph ph-file-pdf" /></div>
                   )}
-                  <button type="button" onClick={() => removeItem(idx)} className="m-up-thumb-del" aria-label="삭제">
+                  <button type="button" onClick={() => removeItem(idx)} className="m-up-thumb-del-mini" aria-label="삭제">
                     <i className="ph ph-x" />
                   </button>
                 </div>
               ))}
             </div>
 
-            <label className="m-up-picker">
-              <input
-                type="file"
-                accept="image/*,application/pdf"
-                multiple
-                hidden
-                onChange={(e) => { onPick(e.target.files); e.target.value = ''; }}
-              />
-              <i className="ph ph-plus" />
-              <span>더 추가</span>
-              <span className="m-up-picker-count">{items.length}/{MAX_FILES}</span>
-            </label>
-
-            {/* Step 1: 차량번호 프롬프트 (파일 선택 후, 차량 미선택) */}
-            {needsCar && (
-              <div className="m-up-prompt">
-                {detecting ? (
-                  <>
-                    <i className="ph ph-spinner spin" />
-                    <span>사진에서 <b>차량번호</b> 자동인식 중…</span>
-                  </>
-                ) : (
-                  <>
-                    <i className="ph-fill ph-arrow-down" />
-                    <span>아래에서 <b>차량번호</b>를 선택하세요</span>
-                  </>
-                )}
-              </div>
+            {/* 감지 중 / 감지 후보 안내 */}
+            {!hasCar && (
+              detecting ? (
+                <div className="m-up-prompt">
+                  <i className="ph ph-spinner spin" />
+                  <span>사진에서 <b>차량번호</b> 자동인식 중…</span>
+                </div>
+              ) : detected ? (
+                <div className="m-up-detect">
+                  <div className="m-up-detect-head">
+                    <i className="ph-fill ph-sparkle" />
+                    <span>자동 감지된 차량번호</span>
+                  </div>
+                  <div className="m-up-detect-plate">{detected}</div>
+                  <div className="m-up-detect-actions">
+                    <button type="button" className="m-up-detect-cancel" onClick={() => setDetected(null)}>
+                      <i className="ph ph-x" /> 아니요
+                    </button>
+                    <button
+                      type="button"
+                      className="m-up-detect-ok"
+                      onClick={() => { setCarNumber(detected); setDetected(null); }}
+                    >
+                      <i className="ph ph-check" /> 이 차량 맞아요
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="m-up-prompt">
+                  <i className="ph-fill ph-arrow-down" />
+                  <span>아래에서 <b>차량번호</b>를 선택하세요</span>
+                </div>
+              )
             )}
 
-            {/* 차량 선택됨 — 차량 카드 */}
+            {/* 차량 확정 후 — 카드 (매칭 성공/실패 모두) */}
             {hasCar && matchedAsset && (
               <div className="m-up-car">
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="m-up-car-head">
                     <span className="m-up-car-num">{matchedAsset.car_number}</span>
-                    {autoDetected && (
-                      <span className="m-up-auto-badge" title="사진에서 자동 감지됨">
-                        <i className="ph-fill ph-sparkle" /> 자동감지
-                      </span>
-                    )}
                     <span className={`jpk-pill tone-${statusTone}`}>{statusLabel}</span>
                   </div>
                   <dl className="m-up-car-rows">
@@ -315,7 +311,7 @@ export default function MobileUpload() {
         )}
       </div>
 
-      {/* ── 하단 dock — 업로드 + 차량번호 검색 통합 ── */}
+      {/* ── 하단 dock — 위↓: 업로드 / 차량검색 / 사진·파일 picker (최하단 고정) ── */}
       <div className="m-up-dock">
         {canSubmit && (
           <button
@@ -328,31 +324,60 @@ export default function MobileUpload() {
             {busy ? '업로드 중' : `${items.length}장 업로드`}
           </button>
         )}
-        {recent.list.length > 0 && (
-          <div className="m-up-dock-recent">
-            <span className="text-2xs text-text-muted">최근</span>
-            {recent.list.slice(0, 8).map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setCarNumber(c)}
-                className={`m-up-chip ${carNumber === c ? 'is-active' : ''}`}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
+        {!noFiles && !hasCar && !detected && (
+          <>
+            {recent.list.length > 0 && (
+              <div className="m-up-dock-recent">
+                <span className="text-2xs text-text-muted">최근</span>
+                {recent.list.slice(0, 8).map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setCarNumber(c)}
+                    className={`m-up-chip ${carNumber === c ? 'is-active' : ''}`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="m-picker m-up-dock-search">
+              <CarNumberPicker
+                value={carNumber}
+                onChange={(v) => { setCarNumber(v); setDetected(null); }}
+                placeholder="차량번호·회원사·모델 검색"
+                showCreate={false}
+                dropUp
+                showAllOnEmpty
+                limit={50}
+              />
+            </div>
+          </>
         )}
-        <div className="m-picker m-up-dock-search">
-          <CarNumberPicker
-            value={carNumber}
-            onChange={(v) => { setCarNumber(v); setAutoDetected(false); }}
-            placeholder="차량번호·회원사·모델 검색"
-            showCreate={false}
-            dropUp
-            showAllOnEmpty
-            limit={50}
-          />
+        {/* 최하단: 파일 · 사진 picker (좌↔우) — 항상 고정 */}
+        <div className="m-up-pickers">
+          <label className="m-up-pick-btn">
+            <input
+              type="file"
+              accept="application/pdf,.doc,.docx,.xls,.xlsx,.hwp,.hwpx"
+              multiple
+              hidden
+              onChange={(e) => { onPick(e.target.files); e.target.value = ''; }}
+            />
+            <i className="ph-fill ph-file-text" />
+            <span>파일</span>
+          </label>
+          <label className="m-up-pick-btn">
+            <input
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              hidden
+              onChange={(e) => { onPick(e.target.files); e.target.value = ''; }}
+            />
+            <i className="ph-fill ph-images" />
+            <span>사진</span>
+          </label>
         </div>
       </div>
     </>
