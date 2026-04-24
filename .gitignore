@@ -19,6 +19,33 @@ scripts/serviceAccount.json
 # scripts — 크롤 로그
 scripts/*.log
 
+# ⚠️ 실데이터 파일 (PII 포함) — 절대 커밋 금지
+scripts/*.csv
+scripts/assets.csv
+scripts/contracts.csv
+scripts/customers.csv
+scripts/insurance-*.csv
+scripts/insurance-*.json
+scripts/*-upload-*.csv
+scripts/*-upload-*.json
+scripts/*-backup*.json
+scripts/*-backup*.csv
+# 크롤 결과는 허용하되 개인정보 포함 파일만 차단
+!scripts/encar-taxonomy.json
+!scripts/vehicle-master-seed.json
+!scripts/vehicle-master-cargo-supplement.json
+!scripts/imported-makers.json
+!scripts/wikicar-raw.json
+!scripts/firebase-cors.json
+
+# 주민번호/전화번호 포함 가능성 파일
+**/*-pii-*.json
+**/*-pii-*.csv
+**/*-real-*.json
+**/*-real-*.csv
+**/*.bak
+**/.personal/
+
 # editor / os
 .DS_Store
 .vscode/settings.json
