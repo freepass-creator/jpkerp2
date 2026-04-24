@@ -11,6 +11,7 @@ import { fmt } from '@/lib/utils';
 import type { RtdbContract, RtdbBilling } from '@/lib/types/rtdb-entities';
 import type { ColDef } from 'ag-grid-community';
 import { useRef } from 'react';
+import { StatusBadge } from '@/components/shared/status-badge';
 
 interface ScheduleRow {
   _key: string;
@@ -228,9 +229,9 @@ export default function BillingSchedulePage() {
                   return (
                     <tr key={b._key} style={{ borderBottom: '1px solid var(--c-border)' }}>
                       <td className="text-xs" style={{ padding: '6px 8px', textAlign: 'center' }}>
-                        <span className={`jpk-pill ${(b as Record<string, unknown>).bill_type === '보증금' ? 'tone-primary' : 'tone-neutral'}`}>
+                        <StatusBadge tone={(b as Record<string, unknown>).bill_type === '보증금' ? 'primary' : 'neutral'}>
                           {String((b as Record<string, unknown>).bill_type ?? '대여료')}
-                        </span>
+                        </StatusBadge>
                       </td>
                       <td className="text-xs text-text-muted" style={{ padding: '6px 8px', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
                         {b.bill_count}
@@ -245,9 +246,9 @@ export default function BillingSchedulePage() {
                         {paid > 0 ? fmt(paid) : '—'}
                       </td>
                       <td style={{ padding: '6px 8px', textAlign: 'center' }}>
-                        <span className={`jpk-pill ${isPaid ? 'tone-success' : isOverdue ? 'tone-danger' : 'tone-neutral'}`}>
+                        <StatusBadge tone={isPaid ? 'success' : isOverdue ? 'danger' : 'neutral'}>
                           {isPaid ? '납부' : isOverdue ? '연체' : '예정'}
-                        </span>
+                        </StatusBadge>
                       </td>
                     </tr>
                   );

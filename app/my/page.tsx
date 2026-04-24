@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { StatusBadge } from '@/components/shared/status-badge';
 
 interface Contract {
   _key?: string;
@@ -281,13 +282,13 @@ function ContractCard({ contract, endDate, dDay }: { contract: Contract; endDate
     : status === '계약해지' ? 'danger'
     : status === '계약완료' ? 'neutral'
     : 'warn';
-  const dTone =
-    dDay === null ? null
+  const dTone: 'danger' | 'warn' | 'neutral' =
+    dDay === null ? 'neutral'
     : dDay < 0 ? 'danger'
     : dDay <= 30 ? 'warn'
     : 'neutral';
   return (
-    <Section title="계약 현황" icon="ph-handshake" action={<span className={`jpk-pill tone-${statusTone}`}>{status}</span>}>
+    <Section title="계약 현황" icon="ph-handshake" action={<StatusBadge tone={statusTone}>{status}</StatusBadge>}>
       <div className="my-kv">
         <div><span>차량</span><b>{contract.car_number ?? '—'}</b></div>
         <div><span>상품</span><b>{contract.product_type ?? '—'}</b></div>
@@ -296,9 +297,9 @@ function ContractCard({ contract, endDate, dDay }: { contract: Contract; endDate
         {dDay !== null && (
           <div>
             <span>만기</span>
-            <b className={`jpk-pill tone-${dTone}`}>
+            <StatusBadge tone={dTone}>
               {dDay < 0 ? `${-dDay}일 경과` : dDay === 0 ? '오늘 만기' : `D-${dDay}`}
-            </b>
+            </StatusBadge>
           </div>
         )}
         {(contract.is_extension || contract.is_renewal) && (
@@ -384,7 +385,7 @@ function BillingProgress({ billings }: { billings: Billing[] }) {
                   <td>{b.bill_count ?? i + 1}</td>
                   <td>{fmtDate(b.due_date)}</td>
                   <td>{fmtMoney(b.amount)}</td>
-                  <td><span className={`jpk-pill tone-${tone}`}>{label}</span></td>
+                  <td><StatusBadge tone={tone}>{label}</StatusBadge></td>
                 </tr>
               );
             })}
@@ -401,9 +402,9 @@ function BillingProgress({ billings }: { billings: Billing[] }) {
                     <td>{fmtDate(b.due_date)}</td>
                     <td>{fmtMoney(b.amount)}</td>
                     <td>
-                      <span className={`jpk-pill tone-${isPaid(b) ? 'success' : 'warn'}`}>
+                      <StatusBadge tone={isPaid(b) ? 'success' : 'warn'}>
                         {isPaid(b) ? '완납' : '미납'}
-                      </span>
+                      </StatusBadge>
                     </td>
                   </tr>
                 ))}

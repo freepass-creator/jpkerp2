@@ -7,8 +7,10 @@ import { DEV_LABELS, DEV_SUBS, DEV_ICONS, type DevKey } from './dev-types';
 import { ToolActionsHost, ToolDetailHost } from './tool-actions-context';
 import { RtdbStatusTool } from './tools/rtdb-status';
 import { CarMasterTool } from './tools/car-master';
+import { VehicleMasterMaintTool } from './tools/vehicle-master-maint';
 import { BulkDeliveryTool } from './tools/bulk-delivery';
 import { OverdueTool } from './tools/overdue-tool';
+import { OverdueSyncTool } from './tools/overdue-sync';
 import { CutoverTool } from './tools/cutover-tool';
 import { MessageTool } from './tools/message-tool';
 import { DataPurgeTool } from './tools/data-purge-tool';
@@ -24,8 +26,10 @@ function ToolFor({ k }: { k: DevKey }) {
   switch (k) {
     case 'rtdb': return <RtdbStatusTool />;
     case 'carmaster': return <CarMasterTool />;
+    case 'carmaster-maint': return <VehicleMasterMaintTool />;
     case 'bulk-delivery': return <BulkDeliveryTool />;
     case 'overdue': return <OverdueTool />;
+    case 'overdue-sync': return <OverdueSyncTool />;
     case 'cutover': return <CutoverTool />;
     case 'alimtalk': return <MessageTool channel="alimtalk" />;
     case 'sms': return <MessageTool channel="sms" />;
@@ -123,6 +127,11 @@ function DevHelp({ k }: { k: DevKey }) {
       '행 클릭으로 수정 모드, 우측 휴지통으로 삭제. 중복 등록 방지.',
       '보유 컬럼은 assets 매칭 실시간 카운트.',
     ],
+    'carmaster-maint': [
+      '엔카 크롤러에 빠진 차종(화물차) 수동 보완.',
+      '15년 이상 단종된 엔트리를 일괄 아카이브(soft delete).',
+      'CSV 업로드 "스킵" 문제 해결 시 여기서 처리.',
+    ],
     'bulk-delivery': [
       '활성 계약 중 출고 이벤트 미입력 + 시작일 도래한 차량 목록.',
       '체크박스 선택 → "선택 N건 출고 처리" 버튼으로 일괄 delivery 이벤트 생성.',
@@ -131,6 +140,13 @@ function DevHelp({ k }: { k: DevKey }) {
       '납부일 경과 + 수납액 < 청구액인 billing 건.',
       '상단 수기 미수 등록 폼 — 자동 파생 외 예외 billing 수기 생성.',
       '연체일 30일 이상 적색, 7일 이상 황색.',
+    ],
+    'overdue-sync': [
+      '계약 업로드 시 같이 들어온 current_overdue 값을 기준으로 billings 초기 정산.',
+      '경과 회차 중 최근 N회차 → 미납, 이전 회차 → 완납으로 일괄 세팅.',
+      '미래 회차(결제대기)는 건드리지 않음.',
+      '최초 1회만 실행. sync 후에는 initial_overdue_synced=true 로 마킹되어 재실행 안 됨.',
+      'admin 이상 권한 필요.',
     ],
     cutover: [
       '계약별 billing 수납 합계 vs 통장·카드 이벤트 합계 매칭.',

@@ -13,6 +13,7 @@ const DEFAULT_TYPES: TypeItem<OpKey>[] = [
   { key: 'insurance',        label: '보험관리',       icon: 'ph-shield-check' },
   { key: 'product_register', label: '상품등록',       icon: 'ph-storefront' },
   { key: 'penalty_notice',   label: '과태료작업',     icon: 'ph-receipt' },
+  { key: 'collect',          label: '미수관리',       icon: 'ph-envelope' },
   { key: 'disposal',         label: '자산처분',       icon: 'ph-archive-box' },
 ];
 

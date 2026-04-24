@@ -18,7 +18,7 @@ import { useRtdbCollection } from '@/lib/collections/rtdb';
 import { normalizeAsset } from '@/lib/asset-normalize';
 import { inferMakerFromVin } from '@/lib/vin-wmi';
 import {
-  nextPartnerCode, nextCustomerCode, nextAssetCode,
+  nextPartnerCode, nextCustomerCode, nextAssetCode, nextContractCode,
   nextVendorCode, nextLoanCode, nextInsuranceCode, nextGpsCode,
 } from '@/lib/code-gen';
 import type { RtdbCarModel, RtdbAsset } from '@/lib/types/rtdb-entities';
@@ -30,6 +30,8 @@ import type { ColDef } from 'ag-grid-community';
 interface SchemaField {
   col: string;
   label: string;
+  /** CSV 헤더의 다른 표기 허용 — 예: "외부색상" ↔ "외장색" */
+  aliases?: string[];
   required?: boolean;
   num?: boolean;
 }
@@ -48,35 +50,35 @@ const SCHEMAS: TypeSpec[] = [
     key: 'asset', label: '자산 (차량)', path: 'assets', groupLabel: '기본 마스터',
     schema: [
       // 차량 식별
-      { col: 'partner_code', label: '회사코드' },
-      { col: 'car_number', label: '차량번호', required: true },
+      { col: 'partner_code', label: '회사코드', aliases: ['회원사코드', '파트너코드'] },
+      { col: 'car_number', label: '차량번호', required: true, aliases: ['번호판'] },
       // 제조사 스펙
-      { col: 'manufacturer', label: '제조사' },
-      { col: 'car_model', label: '모델' },
-      { col: 'detail_model', label: '세부모델' },
-      { col: 'trim', label: '세부트림' },
-      { col: 'options', label: '선택옵션' },
-      { col: 'ext_color', label: '외장색' },
-      { col: 'int_color', label: '내장색' },
-      { col: 'drive_type', label: '구동방식' },
-      { col: 'category', label: '분류' },
-      { col: 'origin', label: '구분' },
-      { col: 'powertrain', label: '동력' },
-      { col: 'battery_kwh', label: '배터리(kWh)', num: true },
+      { col: 'manufacturer', label: '제조사', aliases: ['브랜드', '메이커'] },
+      { col: 'car_model', label: '모델', aliases: ['모델명', '차종'] },
+      { col: 'detail_model', label: '세부모델', aliases: ['상세모델', '세부차종'] },
+      { col: 'trim', label: '세부트림', aliases: ['트림', '등급'] },
+      { col: 'options', label: '선택옵션', aliases: ['옵션'] },
+      { col: 'ext_color', label: '외장색', aliases: ['외부색상', '외장색상', '외색'] },
+      { col: 'int_color', label: '내장색', aliases: ['내부색상', '내장색상', '내색'] },
+      { col: 'drive_type', label: '구동방식', aliases: ['구동', '구동타입'] },
+      { col: 'category', label: '분류', aliases: ['차종분류'] },
+      { col: 'origin', label: '구분', aliases: ['국산수입', '원산지'] },
+      { col: 'powertrain', label: '동력', aliases: ['파워트레인'] },
+      { col: 'battery_kwh', label: '배터리(kWh)', num: true, aliases: ['배터리용량'] },
       { col: 'model_code', label: '모델코드' },
       // 등록증 스펙
-      { col: 'vin', label: '차대번호' },
-      { col: 'car_year', label: '연식', num: true },
-      { col: 'displacement', label: '배기량', num: true },
-      { col: 'seats', label: '승차정원', num: true },
-      { col: 'fuel_type', label: '연료' },
+      { col: 'vin', label: '차대번호', aliases: ['VIN', '차체번호'] },
+      { col: 'car_year', label: '연식', num: true, aliases: ['년식', '제작년도'] },
+      { col: 'displacement', label: '배기량', num: true, aliases: ['배기량(cc)'] },
+      { col: 'seats', label: '승차정원', num: true, aliases: ['인승', '승차'] },
+      { col: 'fuel_type', label: '연료', aliases: ['연료타입', '유종'] },
       { col: 'type_number', label: '형식번호' },
       { col: 'engine_type', label: '원동기형식' },
-      { col: 'first_registration_date', label: '최초등록일' },
-      { col: 'usage_type', label: '용도' },
-      { col: 'owner_name', label: '소유자' },
+      { col: 'first_registration_date', label: '최초등록일', aliases: ['최초등록', '등록일'] },
+      { col: 'usage_type', label: '용도', aliases: ['차량용도'] },
+      { col: 'owner_name', label: '소유자', aliases: ['소유자명', '차주'] },
       { col: 'owner_biz_no', label: '법인등록번호' },
-      { col: 'address', label: '사용본거지' },
+      { col: 'address', label: '사용본거지', aliases: ['주소'] },
       { col: 'length_mm', label: '전장(mm)', num: true },
       { col: 'width_mm', label: '전폭(mm)', num: true },
       { col: 'height_mm', label: '전고(mm)', num: true },
@@ -86,16 +88,39 @@ const SCHEMAS: TypeSpec[] = [
   {
     key: 'contract', label: '계약', path: 'contracts', groupLabel: '기본 마스터',
     schema: [
-      { col: 'partner_code', label: '회사코드', required: true },
+      // 식별
+      { col: 'partner_code', label: '회사코드', required: true, aliases: ['회원사코드', '파트너코드'] },
       { col: 'contract_code', label: '계약코드' },
-      { col: 'car_number', label: '차량번호', required: true },
-      { col: 'contractor_name', label: '계약자명', required: true },
-      { col: 'contractor_phone', label: '연락처' },
-      { col: 'start_date', label: '시작일', required: true },
-      { col: 'end_date', label: '종료일' },
-      { col: 'rent_months', label: '기간(개월)', num: true },
-      { col: 'rent_amount', label: '월 대여료', num: true },
-      { col: 'deposit_amount', label: '보증금', num: true },
+      { col: 'car_number', label: '차량번호', required: true, aliases: ['번호판'] },
+      // 계약자 (개인/법인 공통)
+      { col: 'contractor_name', label: '계약자명', required: true, aliases: ['계약자', '고객명', '상호'] },
+      { col: 'contractor_phone', label: '연락처', aliases: ['전화', '휴대폰'] },
+      { col: 'contractor_reg_no', label: '고객등록번호', aliases: ['주민번호', '등록번호', '사업자등록번호'] },
+      { col: 'contractor_type', label: '구분', aliases: ['고객구분', '법인개인'] },
+      { col: 'contractor_address', label: '주소', aliases: ['계약자주소'] },
+      // 사업자 정보
+      { col: 'biz_no', label: '사업자번호', aliases: ['사업자등록번호2'] },
+      { col: 'biz_name', label: '상호', aliases: ['법인명', '사업자명'] },
+      { col: 'ceo_name', label: '대표자명', aliases: ['대표자'] },
+      { col: 'biz_type', label: '업태' },
+      { col: 'biz_item', label: '종목' },
+      { col: 'tax_email', label: '세금계산서 이메일', aliases: ['세금계산서이메일', '이메일'] },
+      // 실운전자
+      { col: 'driver_name', label: '실운전자 이름', aliases: ['실운전자', '실운전자명'] },
+      { col: 'driver_phone', label: '실운전자 연락처', aliases: ['실운전자전화'] },
+      { col: 'driver_reg_no', label: '실운전자 주민번호', aliases: ['실운전자등록번호'] },
+      // 계약 조건
+      { col: 'start_date', label: '시작일', required: true, aliases: ['계약시작일', '대여시작일'] },
+      { col: 'end_date', label: '종료일', aliases: ['계약종료일', '대여종료일'] },
+      { col: 'rent_months', label: '기간(개월)', num: true, aliases: ['계약기간', '개월'] },
+      { col: 'rent_amount', label: '월 대여료', num: true, aliases: ['월렌트료', '월임대료'] },
+      { col: 'deposit_amount', label: '보증금', num: true, aliases: ['보증'] },
+      { col: 'auto_debit_day', label: '결제일', aliases: ['납부일', '자동이체일'] },
+      // 상태
+      { col: 'delivery_status', label: '인도상태', aliases: ['출고상태'] },
+      { col: 'contract_status', label: '상태', aliases: ['계약상태'] },
+      { col: 'current_overdue', label: '현재미수', num: true, aliases: ['미수', '미수금'] },
+      { col: 'note', label: '메모', aliases: ['비고'] },
     ],
   },
   {
@@ -323,8 +348,14 @@ function mapHeaders(rows: Array<Record<string, string>>, schema: SchemaField[]):
   if (rows.length === 0) return [];
   const headers = Object.keys(rows[0]);
   const map: Record<string, string> = {};
+  const normalize = (s: string) => s.trim().replace(/\s+/g, '');
   for (const h of headers) {
-    const match = schema.find((f) => f.label === h || f.col === h);
+    const hn = normalize(h);
+    const match = schema.find((f) =>
+      f.label === h || f.col === h
+      || normalize(f.label) === hn
+      || f.aliases?.some((a) => a === h || normalize(a) === hn),
+    );
     if (match) map[h] = match.col;
   }
   return rows.map((r) => {
@@ -332,7 +363,15 @@ function mapHeaders(rows: Array<Record<string, string>>, schema: SchemaField[]):
     for (const [h, v] of Object.entries(r)) {
       const key = map[h] ?? h;
       const fld = schema.find((f) => f.col === key);
-      out[key] = fld?.num ? (Number(String(v).replace(/,/g, '')) || 0) : v;
+      // "-", "–", "—" placeholder → 빈 값 / num 필드는 0
+      const str = String(v ?? '').trim();
+      const isPlaceholder = /^[-–—]+$/.test(str) || str === '\\-';
+      if (isPlaceholder) { out[key] = fld?.num ? 0 : ''; continue; }
+      // "무보증" → 보증금 0
+      if (fld?.col === 'deposit_amount' && (str === '무보증' || str === '')) { out[key] = 0; continue; }
+      // "말" (결제일) → 31 (월말)
+      if (fld?.col === 'auto_debit_day' && str === '말') { out[key] = 31; continue; }
+      out[key] = fld?.num ? (Number(str.replace(/,/g, '')) || 0) : str;
     }
     return out;
   });
@@ -416,11 +455,40 @@ export function UploadClient() {
     // 자산 타입이면 정규화 (제조사/모델/세부모델/연료/차종 자동 매칭)
     if (spec.key === 'asset' && vehicleMasters.data.length > 0) {
       rows = rows.map((row) => {
-        const { data, corrections, fuzzyMatches } = normalizeAsset(row as Record<string, unknown>, vehicleMasters.data);
+        const { data, corrections, fuzzyMatches, messages } = normalizeAsset(row as Record<string, unknown>, vehicleMasters.data);
         if (Object.keys(corrections).length > 0) data._corrections = corrections;
         if (Object.keys(fuzzyMatches).length > 0) data._fuzzy_matches = fuzzyMatches;
+        if (messages.length > 0) data._normalize_messages = messages;
         return data;
       });
+      // DEV 디버그: 모델 미채움 행을 콘솔에 기록
+      if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
+        const unresolved = rows.filter((r) => r.manufacturer && !r.car_model);
+        if (unresolved.length > 0) {
+          const firstMfg = String(unresolved[0].manufacturer ?? '');
+          const masterModels = [
+            ...new Set(
+              vehicleMasters.data
+                .filter((m) => m.status !== 'deleted' && m.maker === firstMfg)
+                .map((m) => m.model),
+            ),
+          ];
+          console.group(`[normalizeAsset] 모델 미채움 ${unresolved.length}건`);
+          console.log(`📊 차종마스터 "${firstMfg}" 모델:`, masterModels);
+          for (const r of unresolved) {
+            console.log({
+              car_number: r.car_number,
+              manufacturer: r.manufacturer,
+              detail_model: r.detail_model,
+              messages: r._normalize_messages,
+            });
+          }
+          console.groupEnd();
+          (window as unknown as Record<string, unknown>).__jpkDebug = {
+            vehicleMasters: vehicleMasters.data, unresolvedRows: unresolved, mappedRows: rows,
+          };
+        }
+      }
 
       // 차종마스터 미등록 행 식별 → 저장 스킵
       // 정책: 제조사 또는 모델이 마스터에 없으면 저장 안 함. 사용자가 마스터 먼저 등록 후 재업로드.
@@ -435,12 +503,15 @@ export function UploadClient() {
       rows = rows.map((row) => {
         const mfg = String(row.manufacturer ?? '');
         const mdl = String(row.car_model ?? '');
+        const detail = String(row.detail_model ?? '');
+        const msgs = (row._normalize_messages as string[] | undefined) ?? [];
+        const debugTail = msgs.length ? ` | 정규화로그: ${msgs.join(' / ')}` : '';
         if (!mfg || !validMakers.has(mfg)) {
-          return { ...row, _skip_reason: `차종마스터에 제조사 "${mfg || '(없음)'}" 미등록` };
+          return { ...row, _skip_reason: `차종마스터에 제조사 "${mfg || '(없음)'}" 미등록 (세부모델="${detail}")${debugTail}` };
         }
         const modelsForMaker = modelsByMaker.get(mfg);
         if (!mdl || !modelsForMaker?.has(mdl)) {
-          return { ...row, _skip_reason: `차종마스터에 "${mfg}/${mdl || '(없음)'}" 미등록` };
+          return { ...row, _skip_reason: `모델 자동매칭 실패: 제조사="${mfg}" / 모델="${mdl || '(없음)'}" / 세부모델="${detail}"${debugTail}` };
         }
         return row;
       });
@@ -1321,6 +1392,7 @@ export function UploadClient() {
             member: { field: 'partner_code', gen: nextPartnerCode },
             customer: { field: 'customer_code', gen: nextCustomerCode },
             asset: { field: 'asset_code', gen: nextAssetCode },
+            contract: { field: 'contract_code', gen: nextContractCode },
             vendor: { field: 'vendor_code', gen: nextVendorCode },
             loan: { field: 'loan_code', gen: nextLoanCode },
             insurance: { field: 'insurance_code', gen: nextInsuranceCode },

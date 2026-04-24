@@ -6,6 +6,7 @@ import { Field, TextInput, DateInput, PhoneInput, TextArea } from '@/components/
 import { BtnGroup } from '@/components/form/btn-group';
 import { EntityPicker } from '@/components/form/entity-picker';
 import { useRecordEdit } from '@/lib/hooks/useRecordEdit';
+import { CustomerDocuments } from './customer-documents';
 
 interface PartnerRec extends Record<string, unknown> { _key?: string; partner_code?: string; partner_name?: string }
 import type { RtdbCustomer } from './customer-client';
@@ -109,6 +110,8 @@ export function CustomerEditDialog({ record, onClose }: Props) {
           />
         </Field>
       </div>
+
+      <CustomerDocuments customer={record} />
     </EditDialog>
   );
 }

@@ -10,7 +10,7 @@ import { opIconOf } from './op-icons';
 import { TypesList } from './types-list';
 import { OpContextPanel } from './op-context-panel';
 
-const VISIBLE_KEYS: OpKey[] = ['ioc', 'pc', 'contact', 'accident', 'ignition', 'insurance', 'product_register', 'penalty_notice', 'disposal'];
+const VISIBLE_KEYS: OpKey[] = ['ioc', 'pc', 'contact', 'accident', 'ignition', 'insurance', 'product_register', 'penalty_notice', 'collect', 'disposal'];
 
 // 유형별 폼
 import { ContactForm } from './forms/contact-form';

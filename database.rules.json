@@ -1,0 +1,118 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "users": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val().matches(/^(admin|superadmin)$/))",
+        ".write": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val().matches(/^(admin|superadmin)$/))",
+        "role": {
+          ".validate": "root.child('users').child(auth.uid).child('role').val().matches(/^(admin|superadmin)$/) || !data.exists() || newData.val() === data.val()"
+        },
+        "assigned_partners": {
+          ".validate": "root.child('users').child(auth.uid).child('role').val().matches(/^(admin|superadmin)$/) || !data.exists() || newData.val() === data.val()"
+        }
+      }
+    },
+
+    "assets": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["car_number", "partner_code", "status", "vehicle_status"]
+    },
+
+    "contracts": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["contract_code", "car_number", "partner_code", "status", "created_at", "customer_id"]
+    },
+
+    "customers": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["phone", "biz_no", "partner_code", "car_number"]
+    },
+
+    "billings": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["contract_code", "status", "due_date"]
+    },
+
+    "events": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["car_number", "type", "created_at", "contract_code"]
+    },
+
+    "partners": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(manager|admin|superadmin)$/)",
+      ".indexOn": ["partner_code"]
+    },
+
+    "vendors": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(manager|admin|superadmin)$/)"
+    },
+
+    "insurances": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["contract_code"]
+    },
+
+    "loans": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(manager|admin|superadmin)$/)",
+      ".indexOn": ["contract_code"]
+    },
+
+    "autodebits": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(manager|admin|superadmin)$/)",
+      ".indexOn": ["contract_code"]
+    },
+
+    "gps_devices": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(manager|admin|superadmin)$/)"
+    },
+
+    "tasks": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["assigned_to", "status", "due_date"]
+    },
+
+    "mobile_uploads": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["status", "matched", "created_at", "car_number"]
+    },
+
+    "ocr_documents": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["car_number", "doc_type"]
+    },
+
+    "settings": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(admin|superadmin)$/)"
+    },
+
+    "car_models": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(admin|superadmin)$/)",
+      ".indexOn": ["maker", "model"]
+    },
+
+    "vehicle_master": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(admin|superadmin)$/)",
+      ".indexOn": ["maker", "model", "status"]
+    }
+  }
+}

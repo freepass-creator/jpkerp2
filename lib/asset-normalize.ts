@@ -12,9 +12,27 @@
 import type { RtdbCarModel } from '@/lib/types/rtdb-entities';
 
 // ── 헬퍼 ──
-const norm = (s: unknown) => String(s ?? '').trim();
+/** Roman 숫자 문자(Ⅰ-Ⅻ)를 ASCII 로 변환. "봉고Ⅲ" ↔ "봉고III" 동등하게. */
+const ROMAN_MAP: Record<string, string> = {
+  'Ⅰ': 'I', 'Ⅱ': 'II', 'Ⅲ': 'III', 'Ⅳ': 'IV', 'Ⅴ': 'V',
+  'Ⅵ': 'VI', 'Ⅶ': 'VII', 'Ⅷ': 'VIII', 'Ⅸ': 'IX', 'Ⅹ': 'X',
+  'Ⅺ': 'XI', 'Ⅻ': 'XII',
+  'ⅰ': 'i', 'ⅱ': 'ii', 'ⅲ': 'iii', 'ⅳ': 'iv', 'ⅴ': 'v',
+};
+function romanToAscii(s: string): string {
+  return s.replace(/[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅪⅫⅰⅱⅲⅳⅴ]/g, (c) => ROMAN_MAP[c] ?? c);
+}
+/** 세대 표기 동등화: "봉고3" / "봉고III" / "봉고Ⅲ" → 같은 키 (Arabic → Roman). */
+function arabicToRomanSuffix(s: string): string {
+  return s.replace(/([가-힣A-Za-z])([1-9])(?=\s|$|[^\dA-Za-z])/g, (_m, a, n) => {
+    const roman = (['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'])[Number(n) - 1] ?? n;
+    return a + roman;
+  });
+}
+
+const norm = (s: unknown) => romanToAscii(String(s ?? '').trim());
 const normLow = (s: unknown) => norm(s).toLowerCase().replace(/\s+/g, '');
-const strongNorm = (s: unknown) => String(s ?? '').toLowerCase().replace(/[\s\-_·•‧/()[\]{}]+/g, '');
+const strongNorm = (s: unknown) => arabicToRomanSuffix(romanToAscii(String(s ?? ''))).toLowerCase().replace(/[\s\-_·•‧/()[\]{}]+/g, '');
 
 function levenshtein(a: string, b: string): number {
   if (a === b) return 0;
@@ -102,14 +120,22 @@ const MODEL_NUMBER_MAP: Record<string, string> = {
 };
 
 // 모델명 직접 치환 (번호 패턴이 아닌 고유 이름). 키는 normLow 기준 (공백제거 + 소문자).
+// 화물차 라인(봉고III/포터II)은 supplement seed 로 추가됨 (vehicle-master-cargo-supplement.json).
 const MODEL_NAME_ALIAS: Record<string, string> = {
-  '봉고3': '봉고III 미니버스', '봉고iii': '봉고III 미니버스', 'bongo3': '봉고III 미니버스', 'bongoiii': '봉고III 미니버스',
+  // 기아 화물차 — 봉고3/봉고iii/봉고Ⅲ 모두 "봉고III" 모델로
+  '봉고3': '봉고III', '봉고iii': '봉고III', 'bongo3': '봉고III', 'bongoiii': '봉고III',
   '봉고2': '봉고II', '봉고ii': '봉고II',
-  '포터2': '포터II 내장', '포터ii': '포터II 내장', 'porter2': '포터II 내장',
+  // 현대 화물차 — 포터2/포터ii/포터Ⅱ 모두 "포터II" 모델로
+  '포터2': '포터II', '포터ii': '포터II', 'porter2': '포터II',
+  // 쉐보레
   '트래스': '트랙스', '트레스': '트랙스', '트력스': '트랙스', '트럭스': '트랙스', trax: '트랙스',
   trailblazer: '트레일블레이저',
   rangerover: '레인지로버',
 };
+
+// 벤츠 단일 글자 클래스 매칭 — "C 카브리올레", "E 쿠페" 등
+// subFirstToken이 단일 글자 a/b/c/e/s/v/g 이고 maker=벤츠일 때만 트리거
+const BENZ_LETTER_CLASSES = new Set(['A', 'B', 'C', 'E', 'S', 'V', 'G']);
 
 // 영어↔한글 모델명 매칭 — OCR이 영어로 뽑아도 한글 DB와 매칭되도록
 // 양방향 매핑 (English key → Korean value, 그리고 역매핑도 조회 시 지원)
@@ -448,14 +474,54 @@ export function normalizeAsset(
         if (!found) found = fuzzyBest(stripped, models);
       }
 
-      // 세부모델에서 역추론
+      // 세부모델에서 역추론 (car_model 비어있거나 매칭 실패 시)
       if (!found && data.detail_model) {
         const subRaw = norm(data.detail_model).replace(new RegExp('^' + makerLow + '[\\s\\-]*', 'i'), '').trim();
+        const subFirstToken = subRaw.toLowerCase().split(/\s+/)[0] ?? '';
+        const subStrong = strongNorm(subRaw);
+
+        // 1. 단어 inclusion
         for (const m of models) {
           if (normLow(subRaw).includes(normLow(m)) || normLow(m).includes(normLow(subRaw).split(/[\s(]/)[0])) {
             found = m; break;
           }
         }
+
+        // 2. MODEL_NAME_ALIAS exact — 봉고III → 봉고III, 포터 II → 포터II
+        if (!found && subFirstToken) {
+          const aliasTarget = MODEL_NAME_ALIAS[subFirstToken]
+            ?? MODEL_NAME_ALIAS[normLow(subRaw)]
+            ?? MODEL_NAME_ALIAS[subStrong];
+          if (aliasTarget && models.includes(aliasTarget)) found = aliasTarget;
+        }
+
+        // 3. MODEL_NAME_ALIAS prefix — "포터2내장탑차" 같이 붙여쓴 케이스
+        if (!found && subStrong) {
+          for (const [aliasKey, target] of Object.entries(MODEL_NAME_ALIAS)) {
+            if (subStrong.startsWith(strongNorm(aliasKey)) && models.includes(target)) {
+              found = target; break;
+            }
+          }
+        }
+
+        // 4. MODEL_NUMBER_MAP — S450 → S-클래스, 530i → 5시리즈, CLS300 → CLS-클래스
+        if (!found && subFirstToken) {
+          const tokenStrong = strongNorm(subFirstToken);
+          const numKey = tokenStrong.replace(/[dise]+$/, '');
+          const target = MODEL_NUMBER_MAP[tokenStrong] ?? MODEL_NUMBER_MAP[numKey];
+          if (target) found = models.find((m) => m === target) ?? null;
+        }
+
+        // 5. 벤츠 단일 글자 클래스 — "c 카브리올레" → C-클래스
+        if (!found && data.manufacturer === '벤츠' && subFirstToken.length === 1) {
+          const letter = subFirstToken.toUpperCase();
+          if (BENZ_LETTER_CLASSES.has(letter)) {
+            const target = `${letter}-클래스`;
+            if (models.includes(target)) found = target;
+          }
+        }
+
+        // 6. codeTokens
         if (!found) {
           const subTokens = codeTokens(subRaw);
           if (subTokens.length) {

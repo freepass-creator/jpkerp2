@@ -7,6 +7,7 @@ import { useOpContext } from './op-context-store';
 import { computeTotalDue, normalizeDate, computeContractEnd, today, daysBetween } from '@/lib/date-utils';
 import { metaFor } from '@/lib/event-meta';
 import { EmptyState } from '@/components/shared/empty-state';
+import { StatusBadge } from '@/components/shared/status-badge';
 import type { RtdbBilling, RtdbContract, RtdbEvent } from '@/lib/types/rtdb-entities';
 import { fmt, fmtDate } from '@/lib/utils';
 
@@ -123,11 +124,7 @@ export function OpContextPanel() {
         <div className="form-section-title">
           <i className="ph ph-handshake" />계약
           {dDay !== null && (
-            <span
-              className={`badge ml-auto ${dDay < 0 ? 'text-danger' : dDay <= 30 ? 'text-warn' : 'text-success'}`}
-            >
-              {dDay < 0 ? `만기 ${-dDay}일 경과` : `D-${dDay}`}
-            </span>
+            <StatusBadge dDay={dDay} className="ml-auto" />
           )}
         </div>
         {contract ? (
@@ -151,9 +148,9 @@ export function OpContextPanel() {
           <div className="form-section-title">
             <i className="ph ph-currency-krw" />수납
             {billSummary.unpaidCount > 0 && (
-              <span className="badge badge-danger ml-auto">
+              <StatusBadge tone="danger" className="ml-auto">
                 {billSummary.unpaidCount}회 미납
-              </span>
+              </StatusBadge>
             )}
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
@@ -169,10 +166,7 @@ export function OpContextPanel() {
             </div>
             <div>
               <div className="text-text-muted">미납액</div>
-              <div
-                className="num"
-                style={{ fontWeight: 600, color: billSummary.unpaid > 0 ? 'var(--c-danger)' : 'var(--c-text-muted)' }}
-              >
+              <div className={`num font-semibold ${billSummary.unpaid > 0 ? 'text-danger' : 'text-text-muted'}`}>
                 {fmt(billSummary.unpaid)}원
               </div>
             </div>
