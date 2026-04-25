@@ -3036,3 +3036,262 @@ i.ph {
   min-height: 360px;
   background: var(--c-surface);
 }
+
+/* ═══════════════════════════════════════════════════════
+   v3 Wizard (업무관리 — 12 직접입력 폼)
+   namespaced under .v3-wizard to avoid collision with existing .form-row
+   ═══════════════════════════════════════════════════════ */
+.v3-wizard {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  margin-bottom: var(--sp-4);
+}
+.v3-wizard > *:last-child { border-bottom: none; }
+
+.v3-wizard-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 6px 12px;
+  background: var(--c-bg-sub);
+  border-bottom: 1px solid var(--c-border);
+  min-height: 30px;
+}
+.v3-wizard-head .ico {
+  color: var(--c-accent);
+  font-size: var(--icon);
+  flex-shrink: 0;
+}
+.v3-wizard-head .ico.danger { color: var(--c-err); }
+.v3-wizard-head .title { color: var(--c-text); }
+.v3-wizard-head .desc { color: var(--c-text-muted); }
+
+.v3-wizard-body { padding: var(--sp-3) var(--sp-4); }
+
+.v3-wizard-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 6px 12px;
+  border-top: 1px solid var(--c-border);
+  background: var(--c-surface);
+  min-height: 30px;
+}
+.v3-wizard-foot .desc { color: var(--c-text-muted); }
+.v3-wizard-foot .desc.t-danger { color: var(--c-err); }
+.v3-wizard-foot .actions { margin-left: auto; display: flex; gap: 4px; }
+.v3-wizard-foot .actions button {
+  height: 26px;
+  padding: 0 12px;
+  font-size: var(--fs);
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  color: var(--c-text);
+  border-radius: 0;
+}
+.v3-wizard-foot .actions button.primary {
+  border-color: var(--c-accent);
+  background: var(--c-accent);
+  color: var(--c-text-inv);
+}
+.v3-wizard-foot .actions button.primary:hover {
+  background: var(--c-accent-hover);
+  border-color: var(--c-accent-hover);
+}
+.v3-wizard-foot .actions button:not(.primary):hover { background: var(--c-bg-hover); }
+
+/* form-row inside v3-wizard — namespaced to not collide with existing .form-row */
+.v3-wizard .v3-form-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--c-border-soft);
+}
+.v3-wizard .v3-form-row:last-child { border-bottom: none; }
+.v3-wizard .v3-form-row .label {
+  width: 100px;
+  color: var(--c-text-sub);
+  padding-top: 4px;
+  flex-shrink: 0;
+}
+.v3-wizard .v3-form-row .label.required::after {
+  content: '*';
+  color: var(--c-err);
+  margin-left: 2px;
+}
+.v3-wizard .v3-form-row .field {
+  flex: 1;
+  min-width: 0;
+  display: block; /* override existing .field flex-column */
+}
+.v3-wizard .v3-form-row .field input,
+.v3-wizard .v3-form-row .field select,
+.v3-wizard .v3-form-row .field textarea {
+  width: 100%;
+  font: inherit;
+  letter-spacing: inherit;
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  padding: 0 8px;
+  height: var(--ctrl-h);
+  border-radius: 0;
+  color: var(--c-text);
+}
+.v3-wizard .v3-form-row .field textarea {
+  height: 60px;
+  padding: 6px 8px;
+  resize: vertical;
+}
+.v3-wizard .v3-form-row .field .hint {
+  color: var(--c-text-muted);
+  font-size: var(--fs-tag);
+  margin-top: 4px;
+}
+
+/* option-row */
+.v3-wizard .option-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.v3-wizard .option-btn {
+  height: var(--ctrl-h-sm);
+  padding: 0 10px;
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  color: var(--c-text-sub);
+  font-size: var(--fs-tag);
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 0;
+}
+.v3-wizard .option-btn:hover { background: var(--c-bg); color: var(--c-text); }
+.v3-wizard .option-btn.is-selected {
+  background: var(--c-accent);
+  color: var(--c-text-inv);
+  border-color: var(--c-accent);
+}
+
+/* picker-row */
+.v3-wizard .picker-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.v3-wizard .picker-row input { flex: 1; }
+.v3-wizard .picker-row .pick-btn {
+  height: var(--ctrl-h);
+  padding: 0 12px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  cursor: pointer;
+  border-radius: 0;
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: var(--fs);
+}
+.v3-wizard .picker-row .pick-btn:hover { background: var(--c-bg-hover); }
+
+/* smart-upload (사진/PDF/구글시트/갤러리) */
+.v3-wizard .smart-upload {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+}
+.v3-wizard .upload-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 12px 6px;
+  border: none;
+  border-right: 1px solid var(--c-border-soft);
+  background: transparent;
+  cursor: pointer;
+  height: auto;
+  border-radius: 0;
+  font-family: inherit;
+}
+.v3-wizard .upload-btn:last-child { border-right: none; }
+.v3-wizard .upload-btn:hover { background: var(--c-bg); }
+.v3-wizard .upload-btn i.ph {
+  font-size: var(--icon-xl);
+  color: var(--c-accent);
+}
+.v3-wizard .upload-btn .nm { color: var(--c-text); font-size: var(--fs); }
+.v3-wizard .upload-btn .sub {
+  color: var(--c-text-muted);
+  font-size: var(--fs-tag);
+  letter-spacing: 0;
+}
+
+.v3-wizard .smart-hint {
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+  padding: 4px 12px;
+  border: 1px solid var(--c-border);
+  border-top: none;
+  font-size: var(--fs-tag);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 0;
+}
+.v3-wizard .smart-hint i.ph { font-size: 12px; }
+
+/* v3 simple table (받은요청·시킨요청) */
+.v3-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.v3-table thead th {
+  background: var(--c-bg-sub);
+  text-align: left;
+  padding: 4px 6px;
+  color: var(--c-text-sub);
+  border-bottom: 1px solid var(--c-border);
+  border-right: 1px solid var(--c-border);
+  white-space: nowrap;
+  font-weight: var(--fw-bold);
+  font-size: var(--fs);
+}
+.v3-table thead th:last-child { border-right: none; }
+.v3-table thead th.center,
+.v3-table tbody td.center { text-align: center; }
+.v3-table thead th.num,
+.v3-table tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.v3-table tbody td {
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--c-border-soft);
+  border-right: 1px solid var(--c-border-soft);
+  vertical-align: middle;
+  color: var(--c-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.v3-table tbody td:last-child { border-right: none; }
+.v3-table tbody tr:hover { background: var(--c-bg); cursor: pointer; }
+.v3-table tbody tr:last-child td { border-bottom: none; }
+.v3-table .car-num { color: var(--c-accent); }
+.v3-table .t-muted   { color: var(--c-text-muted); }
+.v3-table .t-warn    { color: var(--c-warn); }
+.v3-table .t-danger  { color: var(--c-err); }
+.v3-table .tag {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 0;
+  font-size: var(--fs-tag);
+  line-height: 16px;
+  letter-spacing: -0.02em;
+}
+.v3-table .tag.active { color: var(--c-emerald); background: var(--c-emerald-bg); }
+.v3-table .tag.repair { color: var(--c-warn); background: var(--c-warn-bg); }
+.v3-table .tag.sale   { color: var(--c-err); background: var(--c-err-bg); }
