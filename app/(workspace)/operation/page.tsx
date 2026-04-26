@@ -8,6 +8,7 @@
  * 실제로 push 하도록 wire-up 됨 (Phase 11 — 입력 wire-up).
  */
 
+import { CsvUploadDialog } from '@/components/v3/csv-upload-dialog';
 import { useAuth } from '@/lib/auth/context';
 import { useRtdbCollection } from '@/lib/collections/rtdb';
 import { saveEvent } from '@/lib/firebase/events';
@@ -372,6 +373,7 @@ function UploadWizard() {
   const [memo, setMemo] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
+  const [csvOpen, setCsvOpen] = useState(false);
 
   const reset = () => {
     setTarget('');
@@ -450,64 +452,81 @@ function UploadWizard() {
   };
 
   return (
-    <WizardShell
-      icon="ph-upload-simple"
-      title="업로드"
-      desc="사진 OCR · PDF 추출 · 다중 첨부"
-      footDesc={files.length > 0 ? `${files.length}개 파일 선택됨` : '파일을 선택한 뒤 저장하세요'}
-      footPrimary="업로드"
-      saving={saving}
-      onSave={onSave}
-      onCancel={reset}
-      body={
-        <>
-          <FormRow label="첨부 파일" required>
-            <input
-              type="file"
-              multiple
-              accept="application/pdf,image/*"
-              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-            />
-            {files.length > 0 && <div className="hint">{files.map((f) => f.name).join(', ')}</div>}
-          </FormRow>
-          <FormRow label="대상 (선택)">
-            <div className="picker-row">
+    <>
+      <WizardShell
+        icon="ph-upload-simple"
+        title="업로드"
+        desc="사진 OCR · PDF 추출 · 다중 첨부"
+        footDesc={
+          files.length > 0 ? `${files.length}개 파일 선택됨` : '파일을 선택한 뒤 저장하세요'
+        }
+        footPrimary="업로드"
+        saving={saving}
+        onSave={onSave}
+        onCancel={reset}
+        body={
+          <>
+            {/* CSV/구글시트 일괄 업로드 진입 — 사진/PDF와 분리 */}
+            <FormRow label="일괄 업로드">
+              <button type="button" className="btn btn-outline" onClick={() => setCsvOpen(true)}>
+                <i className="ph ph-table" />
+                CSV / 구글시트 일괄 업로드
+              </button>
+              <div className="hint">
+                헤더 보고 자동 유형 분류 — 통장·카드·자산·계약·고객·회원사 동시 지원
+              </div>
+            </FormRow>
+            <FormRow label="첨부 파일">
               <input
-                type="text"
-                placeholder="차량번호 (없으면 미연결)"
-                value={target}
-                onChange={(e) => setTarget(e.target.value)}
+                type="file"
+                multiple
+                accept="application/pdf,image/*"
+                onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
               />
-            </div>
-          </FormRow>
-          <FormRow label="업로드 종류">
-            <OptionGroup
-              options={[
-                '자동 분류',
-                '차량등록증',
-                '보험증권',
-                '할부스케줄',
-                '과태료',
-                '견적서·청구서',
-                '계약서',
-                '사고 사진',
-                '반납 사진',
-                '기타',
-              ]}
-              value={kind}
-              onChange={setKind}
-            />
-          </FormRow>
-          <FormRow label="메모">
-            <textarea
-              placeholder="업로드 관련 메모 (선택)"
-              value={memo}
-              onChange={(e) => setMemo(e.target.value)}
-            />
-          </FormRow>
-        </>
-      }
-    />
+              {files.length > 0 && (
+                <div className="hint">{files.map((f) => f.name).join(', ')}</div>
+              )}
+            </FormRow>
+            <FormRow label="대상 (선택)">
+              <div className="picker-row">
+                <input
+                  type="text"
+                  placeholder="차량번호 (없으면 미연결)"
+                  value={target}
+                  onChange={(e) => setTarget(e.target.value)}
+                />
+              </div>
+            </FormRow>
+            <FormRow label="업로드 종류">
+              <OptionGroup
+                options={[
+                  '자동 분류',
+                  '차량등록증',
+                  '보험증권',
+                  '할부스케줄',
+                  '과태료',
+                  '견적서·청구서',
+                  '계약서',
+                  '사고 사진',
+                  '반납 사진',
+                  '기타',
+                ]}
+                value={kind}
+                onChange={setKind}
+              />
+            </FormRow>
+            <FormRow label="메모">
+              <textarea
+                placeholder="업로드 관련 메모 (선택)"
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+              />
+            </FormRow>
+          </>
+        }
+      />
+      <CsvUploadDialog open={csvOpen} onClose={() => setCsvOpen(false)} />
+    </>
   );
 }
 
