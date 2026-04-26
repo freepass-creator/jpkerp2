@@ -1,28 +1,34 @@
 'use client';
 
 /**
- * 과태료 일괄 도구 (Phase 9)
- *  - OCR 단계: 사진 다중 업로드 → 각 OCR 결과 (차번/일자/위반/금액/통지번호)
+ * 과태료 일괄 도구 (Phase 9 → Phase 13 wire-up)
+ *  - OCR 단계: 사진/PDF 다중 업로드 → Vision OCR + parsePenalty
  *  - 매칭 단계: 위반일자 기준 활성 계약 자동 매칭
- *  - PDF 생성: 매 건당 3종 (고지서 사본 + 계약사실확인서 + 변경요청공문)
- *
- * 실제 OCR/PDF 호출은 stubbed (서버 엔드포인트 미구현 상태).
- * 디자인은 v3 placeholder UI로 그대로 동작 가능.
+ *  - PDF 생성: 변경공문 + 고지서 사본 + 계약사실확인서 → ZIP 다운로드
+ *  - 처리 완료: events/penalty 푸시
  */
 
+import type { PenaltyWorkItem } from '@/app/(workspace)/input/operation/penalty-notice-store';
+import { useAuth } from '@/lib/auth/context';
 import { useRtdbCollection } from '@/lib/collections/rtdb';
 import { computeContractEnd } from '@/lib/date-utils';
-import type { RtdbContract } from '@/lib/types/rtdb-entities';
+import { saveEvent } from '@/lib/firebase/events';
+import { ocrFile } from '@/lib/ocr';
+import { detectPenalty, parsePenalty } from '@/lib/parsers/penalty';
+import { downloadPenaltyZip } from '@/lib/penalty-pdf';
+import type { RtdbAsset, RtdbContract } from '@/lib/types/rtdb-entities';
 import { fmt } from '@/lib/utils';
 import { useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 type ProcStatus = 'pending' | 'ocring' | 'ok' | 'fail';
-type DocKind = 'notice' | 'confirm' | 'change';
 
 interface PenaltyItem {
   id: string;
   fileName: string;
   fileSize: number;
+  fileDataUrl?: string;
+  pageNumber?: number;
   status: ProcStatus;
   car_number?: string;
   violate_date?: string;
@@ -31,122 +37,287 @@ interface PenaltyItem {
   notice_no?: string;
   matched_contract?: string;
   matched_contractor?: string;
+  matched_partner?: string;
+  asset?: RtdbAsset;
+  contract?: RtdbContract;
+  raw?: ReturnType<typeof parsePenalty>;
   error?: string;
-  generated?: Partial<Record<DocKind, boolean>>;
+  generated?: boolean;
+  saved?: boolean;
+  saving?: boolean;
 }
 
-const DOC_LABELS: Record<DocKind, string> = {
-  notice: '고지서 사본',
-  confirm: '계약사실확인서',
-  change: '변경요청공문',
-};
+const fileToDataUrl = (f: File): Promise<string> =>
+  new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result));
+    r.onerror = rej;
+    r.readAsDataURL(f);
+  });
 
 export function PenaltyBatchTool() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<PenaltyItem[]>([]);
   const [busy, setBusy] = useState(false);
   const contracts = useRtdbCollection<RtdbContract>('contracts');
+  const assets = useRtdbCollection<RtdbAsset>('assets');
+  const { user } = useAuth();
 
   const summary = useMemo(() => {
     const total = items.length;
     const ok = items.filter((i) => i.status === 'ok').length;
     const fail = items.filter((i) => i.status === 'fail').length;
     const matched = items.filter((i) => Boolean(i.matched_contract)).length;
+    const saved = items.filter((i) => i.saved).length;
     const sumAmount = items.reduce((s, i) => s + (Number(i.amount) || 0), 0);
-    return { total, ok, fail, matched, sumAmount };
+    return { total, ok, fail, matched, saved, sumAmount };
   }, [items]);
 
   const onPick = () => fileRef.current?.click();
 
+  const matchOne = (
+    car: string | undefined,
+    violateDate: string | undefined,
+  ): { contract?: RtdbContract; asset?: RtdbAsset } => {
+    if (!car) return {};
+    const asset = assets.data.find((a) => a.car_number === car);
+    if (!violateDate) return { asset };
+    const candidates = contracts.data.filter((c) => c.car_number === car);
+    const contract =
+      candidates.find((c) => {
+        if (!c.start_date) return false;
+        const end = computeContractEnd(c) ?? '9999-12-31';
+        const d = violateDate.slice(0, 10);
+        return c.start_date.slice(0, 10) <= d && d <= end.slice(0, 10);
+      }) ?? candidates.find((c) => Boolean(c.contractor_name?.trim()));
+    return { contract, asset };
+  };
+
   const onFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const newItems: PenaltyItem[] = Array.from(files).map((f) => ({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      fileName: f.name,
-      fileSize: f.size,
-      status: 'pending',
-    }));
-    setItems((prev) => [...prev, ...newItems]);
-
     setBusy(true);
+
     try {
-      // 순차 OCR 호출 (rate limit 방지)
-      for (const it of newItems) {
-        setItems((prev) => prev.map((p) => (p.id === it.id ? { ...p, status: 'ocring' } : p)));
-        // STUB: 실제로는 /api/ocr/extract/penalty 로 multipart POST
-        // 현재는 deterministic mock data 생성
-        await new Promise((r) => setTimeout(r, 250));
-        const mock = mockPenaltyResult(it.fileName);
-        setItems((prev) =>
-          prev.map((p) =>
-            p.id === it.id
-              ? {
-                  ...p,
-                  status: mock ? 'ok' : 'fail',
-                  ...mock,
-                  error: mock ? undefined : 'OCR 추출 실패',
-                }
-              : p,
-          ),
-        );
+      for (const f of Array.from(files)) {
+        const baseId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const placeholderId = `${baseId}-${f.name}`;
+        const placeholder: PenaltyItem = {
+          id: placeholderId,
+          fileName: f.name,
+          fileSize: f.size,
+          status: 'ocring',
+        };
+        setItems((prev) => [...prev, placeholder]);
+
+        try {
+          const [{ text }, dataUrl] = await Promise.all([ocrFile(f), fileToDataUrl(f)]);
+          const pages = text
+            .split(/---\s*페이지 구분\s*---/)
+            .map((t) => t.trim())
+            .filter(Boolean);
+
+          const recognized: PenaltyItem[] = [];
+          for (let pi = 0; pi < pages.length; pi++) {
+            const pageText = pages[pi];
+            if (!detectPenalty(pageText)) continue;
+            const lines = pageText
+              .split('\n')
+              .map((l) => l.trim())
+              .filter(Boolean);
+            const parsed = parsePenalty(pageText, lines);
+            const { contract, asset } = matchOne(parsed.car_number, parsed.date);
+            recognized.push({
+              id: `${baseId}-p${pi}`,
+              fileName: pages.length > 1 ? `${f.name} (p${pi + 1})` : f.name,
+              fileSize: f.size,
+              fileDataUrl: dataUrl,
+              pageNumber: pi + 1,
+              status: 'ok',
+              car_number: parsed.car_number || undefined,
+              violate_date: parsed.date || undefined,
+              violate_type: parsed.doc_type || undefined,
+              amount: parsed.amount || undefined,
+              notice_no: parsed.notice_no || undefined,
+              matched_contract: contract?.contract_code,
+              matched_contractor: contract?.contractor_name,
+              matched_partner: asset?.partner_code ?? contract?.partner_code,
+              asset,
+              contract,
+              raw: parsed,
+            });
+          }
+
+          setItems((prev) => {
+            const without = prev.filter((p) => p.id !== placeholderId);
+            if (recognized.length === 0) {
+              return [
+                ...without,
+                {
+                  ...placeholder,
+                  status: 'fail',
+                  error: '과태료 고지서 인식 실패',
+                },
+              ];
+            }
+            return [...without, ...recognized];
+          });
+
+          if (recognized.length > 0) {
+            toast.success(`${f.name}: ${recognized.length}건 인식`);
+          } else {
+            toast.warning(`${f.name}: 과태료 고지서를 찾지 못했습니다`);
+          }
+        } catch (err) {
+          const msg = (err as Error).message ?? 'OCR 실패';
+          setItems((prev) =>
+            prev.map((p) => (p.id === placeholderId ? { ...p, status: 'fail', error: msg } : p)),
+          );
+          toast.error(`OCR 실패: ${f.name} — ${msg}`);
+        }
       }
     } finally {
       setBusy(false);
     }
   };
 
-  // 활성 계약 매칭 — 위반일자가 계약기간 안에 있으면 매칭
+  // 매칭 재실행 (수동)
   const onMatch = () => {
     setItems((prev) =>
       prev.map((p) => {
-        const violateDate = p.violate_date;
-        if (!p.car_number || !violateDate) return p;
-        const candidates = contracts.data.filter((c) => c.car_number === p.car_number);
-        const hit = candidates.find((c) => {
-          if (!c.start_date) return false;
-          const end = computeContractEnd(c) ?? '9999-12-31';
-          return c.start_date <= violateDate && violateDate <= end;
-        });
-        if (!hit) return { ...p, matched_contract: undefined, matched_contractor: undefined };
+        if (!p.car_number) return p;
+        const { contract, asset } = matchOne(p.car_number, p.violate_date);
         return {
           ...p,
-          matched_contract: hit.contract_code,
-          matched_contractor: hit.contractor_name,
+          asset,
+          contract,
+          matched_contract: contract?.contract_code,
+          matched_contractor: contract?.contractor_name,
+          matched_partner: asset?.partner_code ?? contract?.partner_code,
         };
       }),
     );
+    toast.info('계약 매칭 재실행');
   };
 
-  // PDF 생성 (stubbed)
-  const onGenerate = (kind: DocKind) => {
-    setItems((prev) =>
-      prev.map((p) =>
-        p.matched_contract ? { ...p, generated: { ...(p.generated ?? {}), [kind]: true } } : p,
-      ),
-    );
-    // STUB: 실제로는 /api/penalty/pdf 호출 → blob → window.open
-    console.info(
-      `[stub] ${DOC_LABELS[kind]} ${items.filter((i) => i.matched_contract).length}건 생성`,
-    );
+  const buildWorkItems = (target: PenaltyItem[]): PenaltyWorkItem[] =>
+    target
+      .filter((p) => p.status === 'ok' && p.fileDataUrl && p.raw)
+      .map((p) => ({
+        ...(p.raw as ReturnType<typeof parsePenalty>),
+        id: p.id,
+        fileName: p.fileName,
+        fileDataUrl: p.fileDataUrl ?? '',
+        fileSize: p.fileSize,
+        pageNumber: p.pageNumber,
+        _asset: p.asset ?? null,
+        _contract: p.contract ?? null,
+        _contractor: p.contract?.contractor_name ?? '',
+      }));
+
+  // PDF ZIP 다운로드 (3종 한 PDF로 묶이고 파일별 ZIP)
+  const onDownloadZip = async () => {
+    const work = buildWorkItems(items);
+    if (work.length === 0) {
+      toast.warning('처리할 고지서가 없습니다');
+      return;
+    }
+    setBusy(true);
+    try {
+      toast.info(`${work.length}건 PDF 생성 중...`);
+      await downloadPenaltyZip(work);
+      setItems((prev) =>
+        prev.map((p) => (work.some((w) => w.id === p.id) ? { ...p, generated: true } : p)),
+      );
+      toast.success(`${work.length}건 ZIP 다운로드 완료`);
+    } catch (err) {
+      toast.error(`다운로드 실패: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 처리완료 — events에 penalty push
+  const onCompleteAll = async () => {
+    const target = items.filter((p) => p.status === 'ok' && !p.saved);
+    if (target.length === 0) {
+      toast.warning('처리할 항목이 없습니다');
+      return;
+    }
+    setBusy(true);
+    let saved = 0;
+    let failed = 0;
+    try {
+      for (const it of target) {
+        setItems((prev) => prev.map((p) => (p.id === it.id ? { ...p, saving: true } : p)));
+        try {
+          const r = it.raw;
+          await saveEvent({
+            type: 'penalty',
+            doc_type: r?.doc_type,
+            car_number: it.car_number,
+            date: it.violate_date,
+            title: r?.description || it.violate_type || '과태료',
+            penalty_amount: r?.penalty_amount,
+            fine_amount: r?.fine_amount,
+            demerit_points: r?.demerit_points,
+            toll_amount: r?.toll_amount,
+            amount: it.amount,
+            location: r?.location,
+            description: r?.description,
+            law_article: r?.law_article,
+            due_date: r?.due_date,
+            notice_no: it.notice_no,
+            issuer: r?.issuer,
+            issue_date: r?.issue_date,
+            payer_name: r?.payer_name,
+            pay_account: r?.pay_account,
+            customer_name: it.contract?.contractor_name,
+            customer_phone: it.contract?.contractor_phone,
+            contract_code: it.contract?.contract_code,
+            partner_code: it.matched_partner,
+            paid_status: '미납',
+            direction: 'out',
+            handler_uid: user?.uid,
+            handler: user?.displayName ?? user?.email ?? undefined,
+            note: `과태료 일괄도구 (${it.fileName})`,
+          });
+          setItems((prev) =>
+            prev.map((p) => (p.id === it.id ? { ...p, saving: false, saved: true } : p)),
+          );
+          saved += 1;
+        } catch (err) {
+          setItems((prev) =>
+            prev.map((p) =>
+              p.id === it.id ? { ...p, saving: false, error: (err as Error).message } : p,
+            ),
+          );
+          failed += 1;
+        }
+      }
+      if (saved > 0) toast.success(`${saved}건 처리완료`);
+      if (failed > 0) toast.error(`${failed}건 저장 실패`);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const onClear = () => setItems([]);
   const onRemove = (id: string) => setItems((prev) => prev.filter((p) => p.id !== id));
 
   const allMatched =
-    items.length > 0 && items.every((i) => i.status === 'ok' && i.matched_contract);
+    items.length > 0 &&
+    items.filter((i) => i.status === 'ok').every((i) => Boolean(i.matched_contract));
   const hasAny = items.length > 0;
+  const hasOk = items.some((p) => p.status === 'ok');
 
   return (
     <div className="penalty-tool">
-      {/* 단계 헤더 */}
       <div className="penalty-steps">
         <Step n={1} label="사진 업로드 → OCR" active={!hasAny} done={hasAny} />
         <Step n={2} label="활성 계약 매칭" active={hasAny && !allMatched} done={allMatched} />
-        <Step n={3} label="PDF 3종 생성" active={allMatched} done={false} />
+        <Step n={3} label="PDF 3종 + 처리완료" active={allMatched} done={false} />
       </div>
 
-      {/* 업로드 영역 */}
       <div className="penalty-uploader">
         <input
           ref={fileRef}
@@ -167,32 +338,25 @@ export function PenaltyBatchTool() {
           JPG·PNG·PDF · OCR로 차량번호·위반일자·금액·통지번호 자동 추출
         </div>
         <div className="penalty-actions">
-          <button type="button" className="m-btn" onClick={onMatch} disabled={!hasAny || busy}>
+          <button type="button" className="m-btn" onClick={onMatch} disabled={!hasOk || busy}>
             <i className="ph ph-link" /> 계약 매칭
           </button>
           <button
             type="button"
             className="m-btn"
-            onClick={() => onGenerate('notice')}
-            disabled={!allMatched || busy}
+            onClick={onDownloadZip}
+            disabled={!hasOk || busy}
+            title="변경공문 + 고지서사본 + 계약사실확인서 (ZIP)"
           >
-            <i className="ph ph-file-text" /> 고지서 사본
+            <i className="ph ph-download-simple" /> PDF 3종 ZIP
           </button>
           <button
             type="button"
-            className="m-btn"
-            onClick={() => onGenerate('confirm')}
-            disabled={!allMatched || busy}
+            className="m-btn is-primary"
+            onClick={onCompleteAll}
+            disabled={!hasOk || busy}
           >
-            <i className="ph ph-clipboard-text" /> 계약사실확인서
-          </button>
-          <button
-            type="button"
-            className="m-btn"
-            onClick={() => onGenerate('change')}
-            disabled={!allMatched || busy}
-          >
-            <i className="ph ph-paper-plane-tilt" /> 변경요청공문
+            <i className="ph ph-check-circle" /> 처리완료 (events 저장)
           </button>
           <button
             type="button"
@@ -205,7 +369,6 @@ export function PenaltyBatchTool() {
         </div>
       </div>
 
-      {/* 결과 테이블 */}
       <div className="v3-table-wrap">
         {items.length === 0 ? (
           <div className="penalty-empty">
@@ -223,7 +386,7 @@ export function PenaltyBatchTool() {
               <col style={{ width: 100 }} />
               <col style={{ width: 120 }} />
               <col style={{ width: 180 }} />
-              <col style={{ width: 120 }} />
+              <col style={{ width: 80 }} />
               <col style={{ width: 40 }} />
             </colgroup>
             <thead>
@@ -236,7 +399,7 @@ export function PenaltyBatchTool() {
                 <th className="right">금액</th>
                 <th>통지번호</th>
                 <th className="left">매칭계약</th>
-                <th>PDF</th>
+                <th>상태</th>
                 <th />
               </tr>
             </thead>
@@ -246,7 +409,12 @@ export function PenaltyBatchTool() {
                   <td>{i + 1}</td>
                   <td className="left">
                     <StatusDot s={p.status} />
-                    <span className="file-name">{p.fileName}</span>
+                    <span className="file-name" title={p.error}>
+                      {p.fileName}
+                      {p.error && (
+                        <span style={{ marginLeft: 6, color: 'var(--c-err)' }}>· {p.error}</span>
+                      )}
+                    </span>
                   </td>
                   <td>{p.car_number ?? '—'}</td>
                   <td>{p.violate_date ?? '—'}</td>
@@ -264,13 +432,15 @@ export function PenaltyBatchTool() {
                     )}
                   </td>
                   <td>
-                    {(['notice', 'confirm', 'change'] as DocKind[]).map((k) => (
-                      <span
-                        key={k}
-                        title={DOC_LABELS[k]}
-                        className={`pdf-dot${p.generated?.[k] ? ' is-done' : ''}`}
-                      />
-                    ))}
+                    {p.saved ? (
+                      <span style={{ color: 'var(--c-ok)' }}>저장됨</span>
+                    ) : p.saving ? (
+                      <i className="ph ph-spinner spin" />
+                    ) : p.generated ? (
+                      <span style={{ color: 'var(--c-text-sub)' }}>PDF</span>
+                    ) : (
+                      <span style={{ color: 'var(--c-text-muted)' }}>—</span>
+                    )}
                   </td>
                   <td>
                     <button
@@ -302,9 +472,11 @@ export function PenaltyBatchTool() {
           <span className="sep">│</span>
           매칭 {summary.matched}
           <span className="sep">│</span>
+          처리완료 {summary.saved}
+          <span className="sep">│</span>
           금액 {fmt(summary.sumAmount)}원
         </div>
-        <div className="muted-note">OCR·PDF 호출은 현재 stub입니다 (서버 엔드포인트 연결 예정)</div>
+        <div className="muted-note">OCR 후 매칭·PDF 생성·events 저장까지 자동</div>
       </div>
     </div>
   );
@@ -330,25 +502,4 @@ function StatusDot({ s }: { s: ProcStatus }) {
   if (s === 'ocring') return <i className="ph ph-spinner spin penalty-status-spin" />;
   const cls = s === 'ok' ? 'ok' : s === 'fail' ? 'fail' : 'pending';
   return <span className={`penalty-status-dot ${cls}`} />;
-}
-
-/**
- * STUB: 실제 OCR 응답 대신 mock data 반환.
- * fileName에 차량번호/일자/금액 패턴이 보이면 추출, 아니면 더미.
- */
-function mockPenaltyResult(fileName: string): Partial<PenaltyItem> | null {
-  // 파일명 기반 best-effort: "12가3456_2026-04-22_4만.jpg" 같은 케이스
-  const car = fileName.match(/(\d{2,3}[가-힣]\d{4})/)?.[1];
-  const date = fileName.match(/(\d{4}-\d{2}-\d{2})/)?.[1];
-  // 무작위 시드 — fileName 길이 기반 deterministic
-  const seed = fileName.length;
-  const types = ['속도위반', '주정차위반', '신호위반', '전용차로위반'];
-  const amounts = [40000, 60000, 70000, 80000];
-  return {
-    car_number: car ?? `12가${(1000 + ((seed * 31) % 9000)).toString().slice(0, 4)}`,
-    violate_date: date ?? new Date(Date.now() - seed * 86400000).toISOString().slice(0, 10),
-    violate_type: types[seed % types.length],
-    amount: amounts[seed % amounts.length],
-    notice_no: `2026-${(seed * 1234).toString().slice(0, 6)}`,
-  };
 }

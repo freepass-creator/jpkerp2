@@ -3876,3 +3876,167 @@ i.ph {
 .v3-stat-pos { color: var(--c-emerald); font-weight: 600; }
 .v3-stat-neg { color: var(--c-err); font-weight: 600; }
 .v3-stat-mut { color: var(--c-text-muted); }
+
+/* ── Phase 13: 자산 요약 chips + 이벤트 상세 모달 ── */
+.detail-summary-row {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px 0;
+  flex-wrap: wrap;
+}
+.detail-summary-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  border-radius: 2px;
+  font-size: 12px;
+  color: var(--c-text-sub);
+}
+.detail-summary-chip .lbl { color: var(--c-text-muted); }
+.detail-summary-chip .val { color: var(--c-text); font-weight: 600; }
+.detail-summary-chip.is-danger { border-color: var(--c-err); }
+.detail-summary-chip.is-danger .val { color: var(--c-err); }
+
+button.timeline-row.is-clickable {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--c-border-soft);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--fs-tag);
+  color: inherit;
+}
+button.timeline-row.is-clickable:hover { background: var(--c-bg-hover); }
+button.timeline-row.is-clickable:last-child { border-bottom: none; }
+
+.event-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.32);
+  z-index: 90;
+  border: none;
+  cursor: pointer;
+}
+.event-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(520px, calc(100vw - 32px));
+  max-height: 80vh;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  z-index: 91;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+}
+.event-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--c-border);
+}
+.event-modal-head .lbl { font-weight: 700; }
+.event-modal-head .when {
+  margin-left: auto;
+  margin-right: 8px;
+  color: var(--c-text-muted);
+  font-feature-settings: 'tnum';
+  font-size: 12px;
+}
+.event-modal-head .close {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--c-text-muted);
+}
+.event-modal-body {
+  padding: 12px 16px;
+  overflow-y: auto;
+  font-size: 13px;
+}
+.event-modal-title {
+  font-weight: 600;
+  color: var(--c-text);
+  margin-bottom: 6px;
+}
+.event-modal-amount {
+  color: var(--c-text);
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+.event-modal-memo {
+  color: var(--c-text-sub);
+  margin-bottom: 12px;
+  white-space: pre-wrap;
+}
+.event-modal-grid {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+.event-modal-grid > div {
+  display: contents;
+}
+.event-modal-grid dt {
+  color: var(--c-text-muted);
+  font-size: 11px;
+  padding-top: 3px;
+}
+.event-modal-grid dd {
+  margin: 0;
+  color: var(--c-text);
+  word-break: break-all;
+}
+
+/* Phase 13: 자산 sub-tab tables */
+.v3-subtab-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.v3-subtab-table thead th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--c-text-sub);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-bg-sub);
+  font-size: 11px;
+}
+.v3-subtab-table thead th.right { text-align: right; }
+.v3-subtab-table tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--c-border-soft);
+  vertical-align: top;
+}
+.v3-subtab-table tbody td.right {
+  text-align: right;
+  font-feature-settings: 'tnum';
+}
+.v3-subtab-table tbody tr:hover { background: var(--c-bg-hover); }
+.v3-subtab-empty {
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--c-text-muted);
+  font-size: 13px;
+}
+
+.m-btn.is-primary {
+  background: var(--c-accent);
+  color: var(--c-text-inv);
+  border-color: var(--c-accent);
+}
+.m-btn.is-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

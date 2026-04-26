@@ -8,8 +8,9 @@
  */
 
 import { useRtdbCollection } from '@/lib/collections/rtdb';
+import { computeContractEnd } from '@/lib/date-utils';
 import { metaFor } from '@/lib/event-meta';
-import type { RtdbEvent } from '@/lib/types/rtdb-entities';
+import type { RtdbBilling, RtdbContract, RtdbEvent } from '@/lib/types/rtdb-entities';
 import { fmt, fmtDate } from '@/lib/utils';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -51,7 +52,10 @@ const CATEGORIES: { key: CategoryKey; label: string; types: string[] }[] = [
 
 export function AssetDetailPanel({ asset, onClose }: Props) {
   const events = useRtdbCollection<RtdbEvent>('events');
+  const contracts = useRtdbCollection<RtdbContract>('contracts');
+  const billings = useRtdbCollection<RtdbBilling>('billings');
   const [active, setActive] = useState<CategoryKey>('all');
+  const [eventDetail, setEventDetail] = useState<RtdbEvent | null>(null);
 
   // ESC 닫기
   useEffect(() => {
@@ -97,6 +101,44 @@ export function AssetDetailPanel({ asset, onClose }: Props) {
     return out;
   }, [carEvents]);
 
+  // 자산 요약 — 미수 / 보유개월 / 사고건수 / 과태료
+  const carBillings = useMemo<RtdbBilling[]>(() => {
+    if (!carNumber) return [];
+    return billings.data.filter((b) => b.car_number === carNumber);
+  }, [billings.data, carNumber]);
+
+  const summary = useMemo(() => {
+    let outstanding = 0;
+    for (const b of carBillings) {
+      const due = Number(b.amount ?? 0);
+      const paid = Number(b.paid_total ?? 0);
+      if (paid < due) outstanding += due - paid;
+    }
+    // 보유개월 — first_registration_date 또는 가장 빠른 계약 시작일 기준
+    const firstReg =
+      typeof asset?.first_registration_date === 'string'
+        ? asset.first_registration_date
+        : undefined;
+    const candidateDates = [firstReg];
+    for (const c of contracts.data) {
+      if (c.car_number === carNumber && c.start_date) candidateDates.push(c.start_date);
+    }
+    const earliest = candidateDates
+      .filter((d): d is string => !!d)
+      .map((d) => d.slice(0, 10))
+      .sort()[0];
+    let holdMonths = 0;
+    if (earliest) {
+      const d = new Date(earliest);
+      const now = new Date();
+      holdMonths = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth());
+      if (holdMonths < 0) holdMonths = 0;
+    }
+    const accidentCount = carEvents.filter((e) => e.type === 'accident').length;
+    const penaltyCount = carEvents.filter((e) => e.type === 'penalty').length;
+    return { outstanding, holdMonths, accidentCount, penaltyCount };
+  }, [carBillings, carEvents, contracts.data, carNumber, asset?.first_registration_date]);
+
   if (!asset) return null;
 
   const status = asset.asset_status ?? asset.status ?? '—';
@@ -124,6 +166,28 @@ export function AssetDetailPanel({ asset, onClose }: Props) {
         </div>
 
         <div className="detail-panel-body">
+          {/* 자산 요약 chips */}
+          <div className="detail-summary-row">
+            <SummaryChip
+              icon="ph-receipt-x"
+              label="미수"
+              value={summary.outstanding > 0 ? `${fmt(summary.outstanding)}원` : '0원'}
+              danger={summary.outstanding > 0}
+            />
+            <SummaryChip
+              icon="ph-clock"
+              label="보유"
+              value={summary.holdMonths > 0 ? `${summary.holdMonths}개월` : '—'}
+            />
+            <SummaryChip
+              icon="ph-car-profile"
+              label="사고"
+              value={`${summary.accidentCount}건`}
+              danger={summary.accidentCount > 0}
+            />
+            <SummaryChip icon="ph-prohibit" label="과태료" value={`${summary.penaltyCount}건`} />
+          </div>
+
           {/* 기본정보 요약 */}
           <section className="detail-info">
             <div className="detail-info-head">차량 기본정보</div>
@@ -203,7 +267,12 @@ export function AssetDetailPanel({ asset, onClose }: Props) {
                 {filtered.map((e, i) => {
                   const meta = metaFor(e.type);
                   return (
-                    <div key={e._key ?? i} className="timeline-row">
+                    <button
+                      key={e._key ?? i}
+                      type="button"
+                      className="timeline-row is-clickable"
+                      onClick={() => setEventDetail(e)}
+                    >
                       <div className="t-date num">{fmtDate(e.date) || '—'}</div>
                       <i className={`ph ${meta.icon} t-icon`} style={{ color: meta.color }} />
                       <div className="t-tag" style={{ color: meta.color }}>
@@ -218,7 +287,7 @@ export function AssetDetailPanel({ asset, onClose }: Props) {
                         </div>
                         {e.memo && <div className="t-memo">{e.memo}</div>}
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -226,6 +295,90 @@ export function AssetDetailPanel({ asset, onClose }: Props) {
           </section>
         </div>
       </aside>
+      <EventDetailModal event={eventDetail} onClose={() => setEventDetail(null)} />
+    </>
+  );
+}
+
+function SummaryChip({
+  icon,
+  label,
+  value,
+  danger,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  danger?: boolean;
+}) {
+  return (
+    <div className={`detail-summary-chip${danger ? ' is-danger' : ''}`}>
+      <i className={`ph ${icon}`} />
+      <span className="lbl">{label}</span>
+      <span className="val num">{value}</span>
+    </div>
+  );
+}
+
+function EventDetailModal({ event, onClose }: { event: RtdbEvent | null; onClose: () => void }) {
+  useEffect(() => {
+    if (!event) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [event, onClose]);
+
+  if (!event) return null;
+  const meta = metaFor(event.type);
+  // 우선 표시할 키 — 빈 값/내부 키는 제외
+  const skipKeys = new Set([
+    '_key',
+    'created_at',
+    'updated_at',
+    'status',
+    'dedup_key',
+    'raw_key',
+    'event_code',
+  ]);
+  const entries = Object.entries(event)
+    .filter(([k, v]) => !skipKeys.has(k) && v !== null && v !== undefined && v !== '')
+    .filter(([, v]) => typeof v !== 'object' || Array.isArray(v));
+
+  return (
+    <>
+      <button type="button" className="event-modal-backdrop" onClick={onClose} aria-label="닫기" />
+      <div
+        className="event-modal"
+        // biome-ignore lint/a11y/useSemanticElements: layered modal에서 dialog element는 z-index 충돌
+        role="dialog"
+        aria-label="이벤트 상세"
+      >
+        <div className="event-modal-head">
+          <i className={`ph ${meta.icon}`} style={{ color: meta.color }} />
+          <span className="lbl">{meta.label}</span>
+          <span className="when">{fmtDate(event.date) || '—'}</span>
+          <button type="button" className="close" onClick={onClose} aria-label="닫기">
+            <i className="ph ph-x" />
+          </button>
+        </div>
+        <div className="event-modal-body">
+          {event.title && <div className="event-modal-title">{event.title}</div>}
+          {Number(event.amount) > 0 && (
+            <div className="event-modal-amount num">{fmt(Number(event.amount))}원</div>
+          )}
+          {event.memo && <div className="event-modal-memo">{event.memo}</div>}
+          <dl className="event-modal-grid">
+            {entries.map(([k, v]) => (
+              <div key={k}>
+                <dt>{k}</dt>
+                <dd>{Array.isArray(v) ? v.join(', ') : String(v)}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </div>
     </>
   );
 }

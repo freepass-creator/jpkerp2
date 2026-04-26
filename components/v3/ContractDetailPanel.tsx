@@ -35,6 +35,7 @@ export function ContractDetailPanel({ contract, onClose }: Props) {
   const events = useRtdbCollection<RtdbEvent>('events');
   const billings = useRtdbCollection<RtdbBilling>('billings');
   const [active, setActive] = useState<CategoryKey>('all');
+  const [eventDetail, setEventDetail] = useState<RtdbEvent | null>(null);
 
   useEffect(() => {
     if (!contract) return;
@@ -238,7 +239,12 @@ export function ContractDetailPanel({ contract, onClose }: Props) {
                 {filtered.map((e, i) => {
                   const meta = metaFor(e.type);
                   return (
-                    <div key={e._key ?? i} className="timeline-row">
+                    <button
+                      key={e._key ?? i}
+                      type="button"
+                      className="timeline-row is-clickable"
+                      onClick={() => setEventDetail(e)}
+                    >
                       <div className="t-date num">{fmtDate(e.date) || '—'}</div>
                       <i className={`ph ${meta.icon} t-icon`} style={{ color: meta.color }} />
                       <div className="t-tag" style={{ color: meta.color }}>
@@ -253,7 +259,7 @@ export function ContractDetailPanel({ contract, onClose }: Props) {
                         </div>
                         {e.memo && <div className="t-memo">{e.memo}</div>}
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -261,6 +267,69 @@ export function ContractDetailPanel({ contract, onClose }: Props) {
           </section>
         </div>
       </aside>
+      <EventDetailModal event={eventDetail} onClose={() => setEventDetail(null)} />
+    </>
+  );
+}
+
+function EventDetailModal({ event, onClose }: { event: RtdbEvent | null; onClose: () => void }) {
+  useEffect(() => {
+    if (!event) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [event, onClose]);
+
+  if (!event) return null;
+  const meta = metaFor(event.type);
+  const skipKeys = new Set([
+    '_key',
+    'created_at',
+    'updated_at',
+    'status',
+    'dedup_key',
+    'raw_key',
+    'event_code',
+  ]);
+  const entries = Object.entries(event)
+    .filter(([k, v]) => !skipKeys.has(k) && v !== null && v !== undefined && v !== '')
+    .filter(([, v]) => typeof v !== 'object' || Array.isArray(v));
+
+  return (
+    <>
+      <button type="button" className="event-modal-backdrop" onClick={onClose} aria-label="닫기" />
+      <div
+        className="event-modal"
+        // biome-ignore lint/a11y/useSemanticElements: layered modal에서 dialog element는 z-index 충돌
+        role="dialog"
+        aria-label="이벤트 상세"
+      >
+        <div className="event-modal-head">
+          <i className={`ph ${meta.icon}`} style={{ color: meta.color }} />
+          <span className="lbl">{meta.label}</span>
+          <span className="when">{fmtDate(event.date) || '—'}</span>
+          <button type="button" className="close" onClick={onClose} aria-label="닫기">
+            <i className="ph ph-x" />
+          </button>
+        </div>
+        <div className="event-modal-body">
+          {event.title && <div className="event-modal-title">{event.title}</div>}
+          {Number(event.amount) > 0 && (
+            <div className="event-modal-amount num">{fmt(Number(event.amount))}원</div>
+          )}
+          {event.memo && <div className="event-modal-memo">{event.memo}</div>}
+          <dl className="event-modal-grid">
+            {entries.map(([k, v]) => (
+              <div key={k}>
+                <dt>{k}</dt>
+                <dd>{Array.isArray(v) ? v.join(', ') : String(v)}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </div>
     </>
   );
 }

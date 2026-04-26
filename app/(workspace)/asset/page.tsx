@@ -6,6 +6,13 @@ import { useRtdbCollection } from '@/lib/collections/rtdb';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  DisposalSubpage,
+  InspectionSubpage,
+  InsuranceSubpage,
+  RepairSubpage,
+  TaxSubpage,
+} from './asset-subpages';
 import { AssetsGrid } from './assets-grid';
 
 type AssetRow = {
@@ -148,6 +155,16 @@ export default function AssetPage() {
           gridRef={gridRef}
           onRowClick={setDetailRow}
         />
+      ) : active === 'asset-insurance' ? (
+        <InsuranceSubpage />
+      ) : active === 'asset-repair' ? (
+        <RepairSubpage />
+      ) : active === 'asset-inspection' ? (
+        <InspectionSubpage />
+      ) : active === 'asset-tax' ? (
+        <TaxSubpage />
+      ) : active === 'asset-disposal' ? (
+        <DisposalSubpage />
       ) : (
         <PlaceholderSubpage label={activeTab.label} filter={filterParam || undefined} />
       )}
