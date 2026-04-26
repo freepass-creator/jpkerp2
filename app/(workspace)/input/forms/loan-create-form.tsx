@@ -4,10 +4,13 @@ import { BtnGroup } from '@/components/form/btn-group';
 import { CarNumberPicker } from '@/components/form/car-number-picker';
 import { DateInput, Field, NumberInput, TextArea, TextInput } from '@/components/form/field';
 import { useAuth } from '@/lib/auth/context';
+import { useRtdbCollection } from '@/lib/collections/rtdb';
 import { getRtdb } from '@/lib/firebase/rtdb';
 import { sanitizeCarNumber } from '@/lib/format-input';
+import type { RtdbAsset } from '@/lib/types/rtdb-entities';
 import { push, ref, serverTimestamp, set } from 'firebase/database';
-import { useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { InputFormShell } from './input-form-shell';
 
@@ -85,10 +88,25 @@ function buildAmortSchedule(
 
 export function LoanCreateForm() {
   const { user } = useAuth();
-  const [carNumber, setCarNumber] = useState('');
+  const params = useSearchParams();
+  const carParam = params.get('car') ?? '';
+  const assets = useRtdbCollection<RtdbAsset>('assets');
+  const [carNumber, setCarNumber] = useState(sanitizeCarNumber(carParam));
   const [partnerCode, setPartnerCode] = useState('');
   const [finCompany, setFinCompany] = useState('현대캐피탈');
   const [repayType, setRepayType] = useState('원리금균등');
+
+  // ?car= 으로 진입한 경우 회원사 자동 매칭
+  // biome-ignore lint/correctness/useExhaustiveDependencies: carParam + 자산 로드만 추적
+  useEffect(() => {
+    if (!carParam || assets.loading) return;
+    const norm = sanitizeCarNumber(carParam);
+    if (norm && norm !== carNumber) setCarNumber(norm);
+    if (!partnerCode) {
+      const hit = assets.data.find((a) => a.car_number === norm);
+      if (hit?.partner_code) setPartnerCode(hit.partner_code);
+    }
+  }, [carParam, assets.loading]);
 
   // 미리보기 (원리금 균등 기준)
   const [previewPrincipal, setPreviewPrincipal] = useState('');

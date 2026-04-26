@@ -1,17 +1,19 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { toast } from 'sonner';
-import { ref as rtdbRef, update, serverTimestamp } from 'firebase/database';
-import { getRtdb } from '@/lib/firebase/rtdb';
-import { InputFormShell } from './input-form-shell';
-import { Field, TextInput, NumberInput, DateInput, TextArea } from '@/components/form/field';
 import { EntityPicker } from '@/components/form/entity-picker';
-import { deriveBillingsFromContract } from '@/lib/derive/billings';
+import { DateInput, Field, NumberInput, TextArea, TextInput } from '@/components/form/field';
+import { useRtdbCollection } from '@/lib/collections/rtdb';
+import { downloadContractPdf } from '@/lib/contract-pdf';
 import { isActiveContractStatus } from '@/lib/data/contract-status';
 import { shortDate } from '@/lib/date-utils';
-import { useRtdbCollection } from '@/lib/collections/rtdb';
-import type { RtdbContract } from '@/lib/types/rtdb-entities';
+import { deriveBillingsFromContract } from '@/lib/derive/billings';
+import { getRtdb } from '@/lib/firebase/rtdb';
+import type { RtdbAsset, RtdbContract } from '@/lib/types/rtdb-entities';
+import { ref as rtdbRef, serverTimestamp, update } from 'firebase/database';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
+import { InputFormShell } from './input-form-shell';
 
 function genContractCode(base?: string): string {
   const d = new Date();
@@ -29,8 +31,18 @@ function dayBefore(ymd: string): string {
 }
 
 export function ContractExtensionForm() {
-  const [baseCode, setBaseCode] = useState('');
+  const params = useSearchParams();
+  const contractParam = params.get('contract') ?? '';
+  const [baseCode, setBaseCode] = useState(contractParam);
   const contracts = useRtdbCollection<RtdbContract>('contracts');
+  const assets = useRtdbCollection<RtdbAsset>('assets');
+
+  // ?contract= 변경 시 prefill (대시보드/만기도래 탭에서 진입)
+  // baseCode 변경은 사용자 액션 — params만 추적
+  // biome-ignore lint/correctness/useExhaustiveDependencies: contractParam 변경만 추적
+  useEffect(() => {
+    if (contractParam && contractParam !== baseCode) setBaseCode(contractParam);
+  }, [contractParam]);
 
   const baseContract = useMemo(
     () => contracts.data.find((c) => c.contract_code === baseCode) ?? null,
@@ -41,7 +53,12 @@ export function ContractExtensionForm() {
   const defaultStart = baseContract?.end_date ? '' : '';
   // 기존 end_date 다음날을 힌트로 (입력 필드는 빈값 시작 — 사용자가 직접 채움)
   const suggestStart = baseContract?.end_date
-    ? (() => { const d = new Date(baseContract.end_date); d.setDate(d.getDate() + 1); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; })()
+    ? (() => {
+        const d = new Date(baseContract.end_date);
+        d.setDate(d.getDate() + 1);
+        const p = (n: number) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+      })()
     : '';
 
   return (
@@ -97,12 +114,45 @@ export function ContractExtensionForm() {
             toast.error(`원본 계약 종료 실패: ${(err as Error).message}`);
           }
         }
+
+        // 3. 연장 계약서 PDF 다운로드 안내
+        const car = String(payload.car_number ?? '');
+        const asset = car ? assets.data.find((a) => a.car_number === car) : undefined;
+        toast.success('연장 계약 등록 완료', {
+          description: '연장 계약서 PDF를 다운로드할까요?',
+          action: {
+            label: '연장 계약서 PDF',
+            onClick: () => {
+              downloadContractPdf({
+                contract_code: payload.contract_code as string | undefined,
+                contractor_name: payload.contractor_name as string | undefined,
+                contractor_phone: payload.contractor_phone as string | undefined,
+                car_number: car,
+                manufacturer: asset?.manufacturer,
+                car_model: asset?.car_model,
+                detail_model: asset?.detail_model,
+                vin: asset?.vin,
+                car_year: asset?.car_year,
+                start_date: payload.start_date as string | undefined,
+                end_date: payload.end_date as string | undefined,
+                rent_months: payload.rent_months as number | undefined,
+                rent_amount: payload.rent_amount as number | undefined,
+                auto_debit_day: payload.auto_debit_day as string | number | undefined,
+                product_type: payload.product_type as string | undefined,
+                is_extension: true,
+                note: payload.note as string | undefined,
+              });
+            },
+          },
+          duration: 8000,
+        });
       }}
       onSaved={() => setBaseCode('')}
     >
       <div className="form-section">
         <div className="form-section-title">
-          <i className="ph ph-arrow-clockwise" />원본 계약 선택
+          <i className="ph ph-arrow-clockwise" />
+          원본 계약 선택
           <span className="text-text-muted text-2xs" style={{ fontWeight: 400, marginLeft: 8 }}>
             · 진행 중인 계약만 선택 가능
           </span>
@@ -127,7 +177,15 @@ export function ContractExtensionForm() {
 
         {baseContract && (
           <div
-            className="text-base" style={{ marginTop: 10, padding: 10, borderRadius: 2, background: 'var(--c-bg-sub)', border: '1px solid var(--c-border)', lineHeight: 1.6 }}
+            className="text-base"
+            style={{
+              marginTop: 10,
+              padding: 10,
+              borderRadius: 2,
+              background: 'var(--c-bg-sub)',
+              border: '1px solid var(--c-border)',
+              lineHeight: 1.6,
+            }}
           >
             <div>
               <b>{baseContract.contractor_name ?? '—'}</b>
@@ -138,7 +196,9 @@ export function ContractExtensionForm() {
             <div className="text-text-sub" style={{ marginTop: 2 }}>
               기존 기간: {shortDate(baseContract.start_date)} ~ {shortDate(baseContract.end_date)}
               {baseContract.rent_months ? ` · ${baseContract.rent_months}개월` : ''}
-              {baseContract.rent_amount ? ` · 월 ${baseContract.rent_amount.toLocaleString()}원` : ''}
+              {baseContract.rent_amount
+                ? ` · 월 ${baseContract.rent_amount.toLocaleString()}원`
+                : ''}
               {baseContract.auto_debit_day ? ` · 매월 ${baseContract.auto_debit_day}일` : ''}
             </div>
             {suggestStart && (
@@ -151,7 +211,10 @@ export function ContractExtensionForm() {
       </div>
 
       <div className="form-section">
-        <div className="form-section-title"><i className="ph ph-calendar-plus" />연장 조건</div>
+        <div className="form-section-title">
+          <i className="ph ph-calendar-plus" />
+          연장 조건
+        </div>
         <div className="form-grid">
           <Field label="연장 계약코드">
             <TextInput name="contract_code" defaultValue={newCode} placeholder={newCode} />
@@ -163,10 +226,7 @@ export function ContractExtensionForm() {
             <NumberInput name="rent_months" placeholder={String(baseContract?.rent_months ?? 12)} />
           </Field>
           <Field label="월 대여료">
-            <NumberInput
-              name="rent_amount"
-              placeholder={String(baseContract?.rent_amount ?? 0)}
-            />
+            <NumberInput name="rent_amount" placeholder={String(baseContract?.rent_amount ?? 0)} />
           </Field>
           <Field label="결제일">
             <TextInput
@@ -185,7 +245,8 @@ export function ContractExtensionForm() {
         className="text-xs text-text-muted"
         style={{ padding: 12, background: 'var(--c-bg-sub)', borderRadius: 2, marginTop: 12 }}
       >
-        💡 연장 등록 시: 새 계약(<b>is_extension</b>)으로 저장 + 수납스케줄 자동 생성, 원본 계약은 <b>계약완료</b>로 전환됩니다.
+        💡 연장 등록 시: 새 계약(<b>is_extension</b>)으로 저장 + 수납스케줄 자동 생성, 원본 계약은{' '}
+        <b>계약완료</b>로 전환됩니다.
       </div>
     </InputFormShell>
   );

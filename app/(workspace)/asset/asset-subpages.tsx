@@ -10,6 +10,7 @@ import { useRtdbCollection } from '@/lib/collections/rtdb';
 import { useAlarmSettings } from '@/lib/hooks/useAlarmSettings';
 import type { RtdbAsset, RtdbEvent } from '@/lib/types/rtdb-entities';
 import { fmt, fmtDate } from '@/lib/utils';
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
 type EventLike = RtdbEvent;
@@ -605,7 +606,25 @@ export function DisposalSubpage() {
   return (
     <div className="v3-subpage is-active">
       <AlertSection alerts={[]} />
-      <StatusFilter value={filter} onChange={setFilter} options={filterOpts} />
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 12,
+          marginBottom: 8,
+        }}
+      >
+        <StatusFilter value={filter} onChange={setFilter} options={filterOpts} />
+        <Link
+          href="/input/operation?type=disposal"
+          className="btn btn-sm btn-primary"
+          style={{ flexShrink: 0 }}
+        >
+          <i className="ph ph-archive-box" />
+          매각·폐차 등록
+        </Link>
+      </div>
       <div className="v3-table-wrap">
         {assets.loading ? (
           <EmptyState label="로드 중..." />

@@ -4,9 +4,12 @@ import { BtnGroup } from '@/components/form/btn-group';
 import { CarNumberPicker } from '@/components/form/car-number-picker';
 import { DateInput, Field, NumberInput, TextArea, TextInput } from '@/components/form/field';
 import { useAuth } from '@/lib/auth/context';
+import { useRtdbCollection } from '@/lib/collections/rtdb';
 import { saveEvent } from '@/lib/firebase/events';
 import { sanitizeCarNumber } from '@/lib/format-input';
-import { useState } from 'react';
+import type { RtdbAsset } from '@/lib/types/rtdb-entities';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { InputFormShell } from './input-form-shell';
 
@@ -25,10 +28,25 @@ const INS_COMPANY_OPTS = [
 
 export function InsuranceCreateForm() {
   const { user } = useAuth();
-  const [carNumber, setCarNumber] = useState('');
+  const params = useSearchParams();
+  const carParam = params.get('car') ?? '';
+  const assets = useRtdbCollection<RtdbAsset>('assets');
+  const [carNumber, setCarNumber] = useState(sanitizeCarNumber(carParam));
   const [partnerCode, setPartnerCode] = useState('');
   const [insKind, setInsKind] = useState('종합(대인+대물+자차)');
   const [insCompany, setInsCompany] = useState('DB손해보험');
+
+  // ?car= 으로 진입한 경우 회원사 자동 매칭 (자산 데이터 로드 후 1회)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: carParam 변경 시점 + 자산 로드 완료 시점만 추적
+  useEffect(() => {
+    if (!carParam || assets.loading) return;
+    const norm = sanitizeCarNumber(carParam);
+    if (norm && norm !== carNumber) setCarNumber(norm);
+    if (!partnerCode) {
+      const hit = assets.data.find((a) => a.car_number === norm);
+      if (hit?.partner_code) setPartnerCode(hit.partner_code);
+    }
+  }, [carParam, assets.loading]);
 
   return (
     <InputFormShell

@@ -11,9 +11,11 @@ import {
   TextArea,
   TextInput,
 } from '@/components/form/field';
+import { useRtdbCollection } from '@/lib/collections/rtdb';
+import { downloadContractPdf } from '@/lib/contract-pdf';
 import { deriveBillingsFromContract } from '@/lib/derive/billings';
 import { sanitizeCarNumber } from '@/lib/format-input';
-import type { RtdbContract } from '@/lib/types/rtdb-entities';
+import type { RtdbAsset, RtdbContract } from '@/lib/types/rtdb-entities';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { InputFormShell } from './input-form-shell';
@@ -49,6 +51,7 @@ export function ContractCreateForm() {
   const [productType, setProductType] = useState('장기렌트');
   const [currentUnpaid, setCurrentUnpaid] = useState('');
   const autoCode = useMemo(() => genContractCode(), []);
+  const assets = useRtdbCollection<RtdbAsset>('assets');
 
   return (
     <InputFormShell
@@ -92,6 +95,38 @@ export function ContractCreateForm() {
         } catch (err) {
           toast.error(`수납스케줄 생성 실패: ${(err as Error).message}`);
         }
+
+        // 계약서 PDF 다운로드 안내
+        const car = String(payload.car_number ?? '');
+        const asset = car ? assets.data.find((a) => a.car_number === car) : undefined;
+        toast.success('계약 등록 완료', {
+          description: '계약서 PDF를 다운로드할까요?',
+          action: {
+            label: '계약서 PDF',
+            onClick: () => {
+              downloadContractPdf({
+                contract_code: payload.contract_code as string | undefined,
+                contractor_name: payload.contractor_name as string | undefined,
+                contractor_phone: payload.contractor_phone as string | undefined,
+                car_number: car,
+                manufacturer: asset?.manufacturer,
+                car_model: asset?.car_model,
+                detail_model: asset?.detail_model,
+                vin: asset?.vin,
+                car_year: asset?.car_year,
+                start_date: payload.start_date as string | undefined,
+                end_date: payload.end_date as string | undefined,
+                rent_months: payload.rent_months as number | undefined,
+                rent_amount: payload.rent_amount as number | undefined,
+                deposit_amount: payload.deposit_amount as number | undefined,
+                auto_debit_day: payload.auto_debit_day as string | number | undefined,
+                product_type: payload.product_type as string | undefined,
+                note: payload.note as string | undefined,
+              });
+            },
+          },
+          duration: 8000,
+        });
       }}
       onSaved={() => {
         setCarNumber('');

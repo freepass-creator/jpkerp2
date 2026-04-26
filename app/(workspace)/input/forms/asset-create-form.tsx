@@ -1,21 +1,27 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { BtnGroup } from '@/components/form/btn-group';
+import { CarNumberPicker } from '@/components/form/car-number-picker';
+import { EntityPicker } from '@/components/form/entity-picker';
+import { DateInput, Field, NumberInput, TextArea, TextInput } from '@/components/form/field';
+import { extractVehicleReg } from '@/lib/claude-extract';
+import { useRtdbCollection } from '@/lib/collections/rtdb';
+import {
+  ASSET_STATUS_OPTS,
+  DRIVE_TYPES,
+  EXT_COLORS,
+  FUEL_TYPES,
+  type FuelType,
+  INT_COLORS,
+  USAGE_TYPES,
+} from '@/lib/data/vehicle-constants';
+import { sanitizeCarNumber } from '@/lib/format-input';
+import type { RtdbAsset } from '@/lib/types/rtdb-entities';
+import { inferMakerFromVin } from '@/lib/vin-wmi';
+import { useRouter } from 'next/navigation';
+import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { InputFormShell } from './input-form-shell';
-import { Field, TextInput, NumberInput, DateInput, TextArea } from '@/components/form/field';
-import { BtnGroup } from '@/components/form/btn-group';
-import { EntityPicker } from '@/components/form/entity-picker';
-import { CarNumberPicker } from '@/components/form/car-number-picker';
-import { sanitizeCarNumber } from '@/lib/format-input';
-import { extractVehicleReg } from '@/lib/claude-extract';
-import { inferMakerFromVin } from '@/lib/vin-wmi';
-import { useRtdbCollection } from '@/lib/collections/rtdb';
-import type { RtdbAsset } from '@/lib/types/rtdb-entities';
-import {
-  FUEL_TYPES, DRIVE_TYPES, EXT_COLORS, INT_COLORS,
-  USAGE_TYPES, ASSET_STATUS_OPTS, type FuelType,
-} from '@/lib/data/vehicle-constants';
 
 interface PartnerRec extends Record<string, unknown> {
   _key?: string;
@@ -27,12 +33,22 @@ interface PartnerRec extends Record<string, unknown> {
 
 interface CarModelRec extends Record<string, unknown> {
   _key?: string;
-  maker?: string; model?: string; sub?: string;
-  category?: string; origin?: string; powertrain?: string;
-  fuel_type?: string; seats?: number; displacement?: number;
-  battery_kwh?: number; code?: string; transmission?: string;
-  year_start?: string | number; year_end?: string | number;
-  production_start?: string; production_end?: string;
+  maker?: string;
+  model?: string;
+  sub?: string;
+  category?: string;
+  origin?: string;
+  powertrain?: string;
+  fuel_type?: string;
+  seats?: number;
+  displacement?: number;
+  battery_kwh?: number;
+  code?: string;
+  transmission?: string;
+  year_start?: string | number;
+  year_end?: string | number;
+  production_start?: string;
+  production_end?: string;
   archived?: boolean;
 }
 
@@ -44,10 +60,27 @@ const DEFAULT_MAKERS = new Set(['현대', '기아', '제네시스', '쉐보레',
 // 제조사 인기순 (보유 대수 같을 때 + 자산 0대 기본 노출 시 정렬 기준)
 // 국산 → 수입 주요 브랜드 순
 const POPULAR_MAKER_ORDER = [
-  '현대', '기아', '제네시스', '쉐보레', '르노', 'KGM',
-  'BMW', '벤츠', '아우디', '폭스바겐', '볼보', '테슬라',
-  '포르쉐', '미니', '렉서스', '토요타', '혼다',
-  '지프', '포드', '랜드로버', '마세라티',
+  '현대',
+  '기아',
+  '제네시스',
+  '쉐보레',
+  '르노',
+  'KGM',
+  'BMW',
+  '벤츠',
+  '아우디',
+  '폭스바겐',
+  '볼보',
+  '테슬라',
+  '포르쉐',
+  '미니',
+  '렉서스',
+  '토요타',
+  '혼다',
+  '지프',
+  '포드',
+  '랜드로버',
+  '마세라티',
 ];
 const POPULAR_INDEX = new Map(POPULAR_MAKER_ORDER.map((name, i) => [name, i] as const));
 
@@ -114,7 +147,8 @@ export function AssetCreateForm() {
   }, [vehicleMasters.data, assetCounts]);
 
   const models = useMemo(() => {
-    if (!manufacturer) return { withCount: [], zeroCount: [], all: [] as { name: string; count: number }[] };
+    if (!manufacturer)
+      return { withCount: [], zeroCount: [], all: [] as { name: string; count: number }[] };
     const set = new Set<string>();
     for (const m of vehicleMasters.data) {
       if ((m as { status?: string }).status === 'deleted') continue;
@@ -122,7 +156,10 @@ export function AssetCreateForm() {
       if (m.maker === manufacturer && m.model) set.add(m.model);
     }
     const all = [...set]
-      .map((name) => ({ name, count: assetCounts.byMakerModel.get(`${manufacturer}|${name}`) ?? 0 }))
+      .map((name) => ({
+        name,
+        count: assetCounts.byMakerModel.get(`${manufacturer}|${name}`) ?? 0,
+      }))
       .sort((a, b) => {
         if (b.count !== a.count) return b.count - a.count;
         return a.name.localeCompare(b.name, 'ko');
@@ -154,9 +191,11 @@ export function AssetCreateForm() {
 
   const masterSpec = useMemo(() => {
     if (!manufacturer || !carModel || !detailModel) return null;
-    return vehicleMasters.data.find(
-      (m) => m.maker === manufacturer && m.model === carModel && m.sub === detailModel,
-    ) ?? null;
+    return (
+      vehicleMasters.data.find(
+        (m) => m.maker === manufacturer && m.model === carModel && m.sub === detailModel,
+      ) ?? null
+    );
   }, [vehicleMasters.data, manufacturer, carModel, detailModel]);
 
   // 등록증 스펙
@@ -172,165 +211,180 @@ export function AssetCreateForm() {
   const [engineType, setEngineType] = useState('');
   const [status, setStatus] = useState('active');
 
+  // 매입 정보
+  const [acquisitionCost, setAcquisitionCost] = useState('');
+  const [acquisitionDate, setAcquisitionDate] = useState('');
+  const [dealerName, setDealerName] = useState('');
+  const [paymentType, setPaymentType] = useState('일시불');
+
   // OCR 상태
   const [ocrBusy, setOcrBusy] = useState(false);
+
+  const router = useRouter();
 
   // 세부모델 선택 시 스펙 자동 채움
   const applySpec = useCallback((spec: CarModelRec | null) => {
     if (!spec) return;
-    if (spec.fuel_type && FUEL_TYPES.includes(spec.fuel_type as FuelType)) setFuelType(spec.fuel_type);
+    if (spec.fuel_type && FUEL_TYPES.includes(spec.fuel_type as FuelType))
+      setFuelType(spec.fuel_type);
     if (spec.displacement) setDisplacement(String(spec.displacement));
     if (spec.seats) setSeats(String(spec.seats));
   }, []);
 
   // 등록증 OCR — Gemini Vision + 차종마스터 컨텍스트로 제조사/모델/세부모델까지 자동 매칭
-  const handleRegUpload = useCallback(async (file: File) => {
-    setOcrBusy(true);
-    try {
-      // 활성 마스터만 컨텍스트로 전달 (archived 제외) — Gemini가 정확한 sub 값 선택
-      const activeMasters = vehicleMasters.data.filter(
-        (m) => (m as { status?: string }).status !== 'deleted' && !m.archived,
-      );
-      const res = await extractVehicleReg(file, activeMasters);
-      const reg = res.extracted;
-      if (!reg) {
-        toast.error('등록증 추출 실패');
-        return;
-      }
-
-      // 기본 필드
-      if (reg.car_number) setCarNumber(reg.car_number);
-      if (reg.vin) setVin(reg.vin);
-      if (reg.car_year) setCarYear(String(reg.car_year));
-      if (reg.fuel_type) setFuelType(reg.fuel_type);
-      if (reg.displacement) setDisplacement(String(reg.displacement));
-      if (reg.seats) setSeats(String(reg.seats));
-      if (reg.usage_type) setUsageType(reg.usage_type);
-      if (reg.first_registration_date) setFirstRegDate(reg.first_registration_date);
-      if (reg.owner_name) setOwnerName(reg.owner_name);
-      if (reg.type_number) setTypeNumber(reg.type_number);
-      if (reg.engine_type) setEngineType(reg.engine_type);
-
-      // 제조사/모델/세부모델 — Gemini가 마스터 보고 매칭한 값
-      let matchedMfr = reg.manufacturer ?? '';
-      let matchedModel = reg.car_model ?? '';
-      const matchedSub = reg.detail_model ?? '';
-
-      // VIN WMI 폴백: Gemini가 제조사를 못 찾은 경우
-      if (!matchedMfr && reg.vin) {
-        const hint = inferMakerFromVin(reg.vin);
-        if (hint) matchedMfr = hint;
-      }
-
-      // 세부모델 매칭: Gemini가 고른 sub + 연식 기반 검증.
-      // Gemini가 최신 세대로 잘못 고르는 경우가 있어 car_year가 생산기간 밖이면 같은 maker+model
-      // 내에서 연식 맞는 sub로 재선택한다.
-      let finalSub = '';
-      let masterHit: CarModelRec | null = null;
-      if (matchedMfr && matchedModel) {
-        const norm = (s: string) => s.replace(/[\s()]/g, '').toLowerCase();
-        const siblings = activeMasters.filter(
-          (m) => m.maker === matchedMfr && m.model === matchedModel && m.sub,
+  const handleRegUpload = useCallback(
+    async (file: File) => {
+      setOcrBusy(true);
+      try {
+        // 활성 마스터만 컨텍스트로 전달 (archived 제외) — Gemini가 정확한 sub 값 선택
+        const activeMasters = vehicleMasters.data.filter(
+          (m) => (m as { status?: string }).status !== 'deleted' && !m.archived,
         );
-        // 1) Gemini가 고른 sub 1차 매칭 (정확/fuzzy)
-        if (matchedSub) {
-          const target = norm(matchedSub);
-          masterHit = siblings.find((m) => m.sub === matchedSub)
-            ?? siblings.find((m) => m.sub && norm(m.sub) === target)
-            ?? null;
+        const res = await extractVehicleReg(file, activeMasters);
+        const reg = res.extracted;
+        if (!reg) {
+          toast.error('등록증 추출 실패');
+          return;
         }
-        // 2) 연식 검증 — car_year가 생산기간 밖이면 올바른 세대로 교체
-        const yr = reg.car_year;
-        if (yr && siblings.length > 0) {
-          const yearFits = (m: CarModelRec): boolean => {
-            const s = (m.production_start ?? (m.year_start ? `${m.year_start}-01` : '')) as string;
-            const e = (m.production_end ?? (m.year_end ? `${m.year_end}-12` : '')) as string;
-            const startYr = s ? Number(s.slice(0, 4)) : 0;
-            const endYr = !e || e === '현재' ? 9999 : Number(e.slice(0, 4));
-            return startYr <= yr && yr <= endYr;
-          };
-          if (!masterHit || !yearFits(masterHit)) {
-            // 연식 맞는 sub 후보 중 production_start 가장 최신 우선 (대부분 최신 리프레시 선호)
-            const fit = siblings
-              .filter(yearFits)
-              .sort((a, b) => {
+
+        // 기본 필드
+        if (reg.car_number) setCarNumber(reg.car_number);
+        if (reg.vin) setVin(reg.vin);
+        if (reg.car_year) setCarYear(String(reg.car_year));
+        if (reg.fuel_type) setFuelType(reg.fuel_type);
+        if (reg.displacement) setDisplacement(String(reg.displacement));
+        if (reg.seats) setSeats(String(reg.seats));
+        if (reg.usage_type) setUsageType(reg.usage_type);
+        if (reg.first_registration_date) setFirstRegDate(reg.first_registration_date);
+        if (reg.owner_name) setOwnerName(reg.owner_name);
+        if (reg.type_number) setTypeNumber(reg.type_number);
+        if (reg.engine_type) setEngineType(reg.engine_type);
+
+        // 제조사/모델/세부모델 — Gemini가 마스터 보고 매칭한 값
+        let matchedMfr = reg.manufacturer ?? '';
+        let matchedModel = reg.car_model ?? '';
+        const matchedSub = reg.detail_model ?? '';
+
+        // VIN WMI 폴백: Gemini가 제조사를 못 찾은 경우
+        if (!matchedMfr && reg.vin) {
+          const hint = inferMakerFromVin(reg.vin);
+          if (hint) matchedMfr = hint;
+        }
+
+        // 세부모델 매칭: Gemini가 고른 sub + 연식 기반 검증.
+        // Gemini가 최신 세대로 잘못 고르는 경우가 있어 car_year가 생산기간 밖이면 같은 maker+model
+        // 내에서 연식 맞는 sub로 재선택한다.
+        let finalSub = '';
+        let masterHit: CarModelRec | null = null;
+        if (matchedMfr && matchedModel) {
+          const norm = (s: string) => s.replace(/[\s()]/g, '').toLowerCase();
+          const siblings = activeMasters.filter(
+            (m) => m.maker === matchedMfr && m.model === matchedModel && m.sub,
+          );
+          // 1) Gemini가 고른 sub 1차 매칭 (정확/fuzzy)
+          if (matchedSub) {
+            const target = norm(matchedSub);
+            masterHit =
+              siblings.find((m) => m.sub === matchedSub) ??
+              siblings.find((m) => m.sub && norm(m.sub) === target) ??
+              null;
+          }
+          // 2) 연식 검증 — car_year가 생산기간 밖이면 올바른 세대로 교체
+          const yr = reg.car_year;
+          if (yr && siblings.length > 0) {
+            const yearFits = (m: CarModelRec): boolean => {
+              const s = (m.production_start ??
+                (m.year_start ? `${m.year_start}-01` : '')) as string;
+              const e = (m.production_end ?? (m.year_end ? `${m.year_end}-12` : '')) as string;
+              const startYr = s ? Number(s.slice(0, 4)) : 0;
+              const endYr = !e || e === '현재' ? 9999 : Number(e.slice(0, 4));
+              return startYr <= yr && yr <= endYr;
+            };
+            if (!masterHit || !yearFits(masterHit)) {
+              // 연식 맞는 sub 후보 중 production_start 가장 최신 우선 (대부분 최신 리프레시 선호)
+              const fit = siblings.filter(yearFits).sort((a, b) => {
                 const sa = String(a.production_start ?? a.year_start ?? '');
                 const sb = String(b.production_start ?? b.year_start ?? '');
                 return sb.localeCompare(sa);
               });
-            if (fit.length > 0) masterHit = fit[0];
+              if (fit.length > 0) masterHit = fit[0];
+            }
+          }
+          if (masterHit) {
+            finalSub = masterHit.sub ?? '';
+            // Gemini가 model을 살짝 다르게 반환했을 수 있으니 마스터 값으로 교정
+            matchedModel = masterHit.model ?? matchedModel;
+            matchedMfr = masterHit.maker ?? matchedMfr;
           }
         }
-        if (masterHit) {
-          finalSub = masterHit.sub ?? '';
-          // Gemini가 model을 살짝 다르게 반환했을 수 있으니 마스터 값으로 교정
-          matchedModel = masterHit.model ?? matchedModel;
-          matchedMfr = masterHit.maker ?? matchedMfr;
-        }
-      }
 
-      if (matchedMfr) setManufacturer(matchedMfr);
-      if (matchedModel) setCarModel(matchedModel);
-      if (finalSub) setDetailModel(finalSub);
-      if (masterHit) applySpec(masterHit);
+        if (matchedMfr) setManufacturer(matchedMfr);
+        if (matchedModel) setCarModel(matchedModel);
+        if (finalSub) setDetailModel(finalSub);
+        if (masterHit) applySpec(masterHit);
 
-      // 회원사 자동 매칭 — 소유자 법인등록번호 → 회사명 순으로 기존 partners 검색
-      // (이미 사용자가 회사코드를 입력한 경우는 건드리지 않음)
-      let matchedPartnerCode = '';
-      if (!partnerCode) {
-        const normalizeCorpName = (s: string) => String(s)
-          .replace(/\s+/g, '')
-          .replace(/주식회사|유한회사|\(주\)|\(유\)|㈜|㈕|주\)|유\)/g, '')
-          .replace(/[().,\-_]/g, '')
-          .toLowerCase();
-        const activePartners = partners.data.filter(
-          (p) => (p as { status?: string }).status !== 'deleted' && p.partner_code,
-        );
-        // 1차: owner_biz_no(법인등록번호 또는 사업자번호) 숫자만 추출해서 9자리 이상 매칭
-        const ownerBizDigits = (reg.owner_biz_no ?? '').replace(/\D/g, '');
-        if (ownerBizDigits.length >= 9) {
-          const hit = activePartners.find((p) => {
-            const cn = (p.corp_no ?? '').replace(/\D/g, '');
-            const bn = (p.biz_no ?? '').replace(/\D/g, '');
-            return (cn && cn === ownerBizDigits) || (bn && bn === ownerBizDigits);
-          });
-          if (hit?.partner_code) matchedPartnerCode = hit.partner_code;
-        }
-        // 2차: 회사명 정규화 매칭 (owner_biz_no 불일치/부재 대비)
-        if (!matchedPartnerCode && reg.owner_name) {
-          const key = normalizeCorpName(reg.owner_name);
-          if (key) {
-            const hit = activePartners.find(
-              (p) => p.partner_name && normalizeCorpName(p.partner_name) === key,
-            );
+        // 회원사 자동 매칭 — 소유자 법인등록번호 → 회사명 순으로 기존 partners 검색
+        // (이미 사용자가 회사코드를 입력한 경우는 건드리지 않음)
+        let matchedPartnerCode = '';
+        if (!partnerCode) {
+          const normalizeCorpName = (s: string) =>
+            String(s)
+              .replace(/\s+/g, '')
+              .replace(/주식회사|유한회사|\(주\)|\(유\)|㈜|㈕|주\)|유\)/g, '')
+              .replace(/[().,\-_]/g, '')
+              .toLowerCase();
+          const activePartners = partners.data.filter(
+            (p) => (p as { status?: string }).status !== 'deleted' && p.partner_code,
+          );
+          // 1차: owner_biz_no(법인등록번호 또는 사업자번호) 숫자만 추출해서 9자리 이상 매칭
+          const ownerBizDigits = (reg.owner_biz_no ?? '').replace(/\D/g, '');
+          if (ownerBizDigits.length >= 9) {
+            const hit = activePartners.find((p) => {
+              const cn = (p.corp_no ?? '').replace(/\D/g, '');
+              const bn = (p.biz_no ?? '').replace(/\D/g, '');
+              return (cn && cn === ownerBizDigits) || (bn && bn === ownerBizDigits);
+            });
             if (hit?.partner_code) matchedPartnerCode = hit.partner_code;
           }
+          // 2차: 회사명 정규화 매칭 (owner_biz_no 불일치/부재 대비)
+          if (!matchedPartnerCode && reg.owner_name) {
+            const key = normalizeCorpName(reg.owner_name);
+            if (key) {
+              const hit = activePartners.find(
+                (p) => p.partner_name && normalizeCorpName(p.partner_name) === key,
+              );
+              if (hit?.partner_code) matchedPartnerCode = hit.partner_code;
+            }
+          }
+          if (matchedPartnerCode) setPartnerCode(matchedPartnerCode);
         }
-        if (matchedPartnerCode) setPartnerCode(matchedPartnerCode);
-      }
 
-      const filled = [
-        reg.car_number && '차량번호',
-        reg.vin && '차대번호',
-        matchedPartnerCode && '회사코드',
-        matchedMfr && '제조사',
-        matchedModel && '모델',
-        finalSub && '세부모델',
-        reg.displacement && '배기량',
-        reg.fuel_type && '연료',
-        reg.seats && '승차정원',
-      ].filter(Boolean);
-      if (matchedSub && !finalSub) {
-        toast.warning(`등록증 OCR 완료 · 세부모델 "${matchedSub}" 마스터에 없음 — 수동 선택 필요`);
-      } else {
-        toast.success(`등록증 OCR 완료 · ${filled.join(', ')} 자동 채움`);
+        const filled = [
+          reg.car_number && '차량번호',
+          reg.vin && '차대번호',
+          matchedPartnerCode && '회사코드',
+          matchedMfr && '제조사',
+          matchedModel && '모델',
+          finalSub && '세부모델',
+          reg.displacement && '배기량',
+          reg.fuel_type && '연료',
+          reg.seats && '승차정원',
+        ].filter(Boolean);
+        if (matchedSub && !finalSub) {
+          toast.warning(
+            `등록증 OCR 완료 · 세부모델 "${matchedSub}" 마스터에 없음 — 수동 선택 필요`,
+          );
+        } else {
+          toast.success(`등록증 OCR 완료 · ${filled.join(', ')} 자동 채움`);
+        }
+      } catch (err) {
+        toast.error(`OCR 실패: ${(err as Error).message}`);
+      } finally {
+        setOcrBusy(false);
       }
-    } catch (err) {
-      toast.error(`OCR 실패: ${(err as Error).message}`);
-    } finally {
-      setOcrBusy(false);
-    }
-  }, [vehicleMasters.data, partners.data, partnerCode, applySpec]);
+    },
+    [vehicleMasters.data, partners.data, partnerCode, applySpec],
+  );
 
   return (
     <InputFormShell
@@ -366,18 +420,59 @@ export function AssetCreateForm() {
         first_registration_date: firstRegDate || undefined,
         owner_name: ownerName || undefined,
         key_count: 2,
+        acquisition_cost: acquisitionCost
+          ? Number(String(acquisitionCost).replace(/,/g, ''))
+          : undefined,
+        acquisition_date: acquisitionDate || undefined,
+        dealer_name: dealerName || undefined,
+        payment_type: paymentType,
         status,
       })}
+      afterSave={async (_key, payload) => {
+        const car = String(payload.car_number ?? '');
+        if (!car) return;
+        const isInstallment = paymentType === '할부' || paymentType === '리스';
+        toast.success('자산 등록 완료', {
+          description: isInstallment
+            ? '할부·보험 등록을 이어서 진행하시겠어요?'
+            : '보험 등록을 이어서 진행하시겠어요?',
+          action: {
+            label: isInstallment ? '할부 등록' : '보험 등록',
+            onClick: () => {
+              const type = isInstallment ? 'loan' : 'insurance';
+              router.push(`/input?type=${type}&car=${encodeURIComponent(car)}`);
+            },
+          },
+          duration: 8000,
+        });
+      }}
       onSaved={() => {
-        setCarNumber(''); setVin(''); setManufacturer(''); setCarModel('');
-        setDetailModel(''); setCarYear(''); setDisplacement(''); setSeats('');
-        setDriveType(''); setExtColor(''); setIntColor(''); setUsageType('렌터카');
-        setFirstRegDate(''); setOwnerName(''); setTypeNumber(''); setEngineType('');
+        setCarNumber('');
+        setVin('');
+        setManufacturer('');
+        setCarModel('');
+        setDetailModel('');
+        setCarYear('');
+        setDisplacement('');
+        setSeats('');
+        setDriveType('');
+        setExtColor('');
+        setIntColor('');
+        setUsageType('렌터카');
+        setFirstRegDate('');
+        setOwnerName('');
+        setTypeNumber('');
+        setEngineType('');
+        setAcquisitionCost('');
+        setAcquisitionDate('');
+        setDealerName('');
+        setPaymentType('일시불');
       }}
     >
       {/* ── ① 차량번호 ── */}
       <div className="form-section-title">
-        <i className="ph ph-car" />차량 식별
+        <i className="ph ph-car" />
+        차량 식별
       </div>
       <div className="form-row">
         <Field label="차량번호" required>
@@ -408,7 +503,8 @@ export function AssetCreateForm() {
       {/* ── ② 제조사 스펙 ── */}
       <div className="form-section">
         <div className="form-section-title">
-          <i className="ph ph-factory" />제조사 스펙
+          <i className="ph ph-factory" />
+          제조사 스펙
         </div>
 
         {/* 제조사 → 모델 → 세부모델 단계별 선택 */}
@@ -419,21 +515,29 @@ export function AssetCreateForm() {
               className="input"
               value={manufacturer}
               onChange={(e) => {
-                if (e.target.value === SHOW_ALL_SENTINEL) { setShowAllMakers(true); return; }
-                setManufacturer(e.target.value); setCarModel(''); setDetailModel('');
+                if (e.target.value === SHOW_ALL_SENTINEL) {
+                  setShowAllMakers(true);
+                  return;
+                }
+                setManufacturer(e.target.value);
+                setCarModel('');
+                setDetailModel('');
                 setShowAllModels(false);
               }}
             >
               <option value="">선택</option>
               {makers.withCount.map((m) => (
                 <option key={m.name} value={m.name}>
-                  {m.name}{m.count > 0 ? ` (${m.count})` : ''}
+                  {m.name}
+                  {m.count > 0 ? ` (${m.count})` : ''}
                 </option>
               ))}
               {showAllMakers && makers.zeroCount.length > 0 && (
                 <optgroup label="── 미보유 ──">
                   {makers.zeroCount.map((m) => (
-                    <option key={m.name} value={m.name}>{m.name}</option>
+                    <option key={m.name} value={m.name}>
+                      {m.name}
+                    </option>
                   ))}
                 </optgroup>
               )}
@@ -447,21 +551,28 @@ export function AssetCreateForm() {
               className="input"
               value={carModel}
               onChange={(e) => {
-                if (e.target.value === SHOW_ALL_SENTINEL) { setShowAllModels(true); return; }
-                setCarModel(e.target.value); setDetailModel('');
+                if (e.target.value === SHOW_ALL_SENTINEL) {
+                  setShowAllModels(true);
+                  return;
+                }
+                setCarModel(e.target.value);
+                setDetailModel('');
               }}
               disabled={!manufacturer}
             >
               <option value="">선택</option>
               {models.withCount.map((m) => (
                 <option key={m.name} value={m.name}>
-                  {m.name}{m.count > 0 ? ` (${m.count})` : ''}
+                  {m.name}
+                  {m.count > 0 ? ` (${m.count})` : ''}
                 </option>
               ))}
               {showAllModels && models.zeroCount.length > 0 && (
                 <optgroup label="── 미보유 ──">
                   {models.zeroCount.map((m) => (
-                    <option key={m.name} value={m.name}>{m.name}</option>
+                    <option key={m.name} value={m.name}>
+                      {m.name}
+                    </option>
                   ))}
                 </optgroup>
               )}
@@ -477,24 +588,42 @@ export function AssetCreateForm() {
               onChange={(e) => {
                 setDetailModel(e.target.value);
                 const spec = vehicleMasters.data.find(
-                  (m) => m.maker === manufacturer && m.model === carModel && m.sub === e.target.value,
+                  (m) =>
+                    m.maker === manufacturer && m.model === carModel && m.sub === e.target.value,
                 );
                 applySpec(spec ?? null);
               }}
               disabled={!carModel}
             >
               <option value="">선택 (최신순)</option>
-              {subs.map((s) => <option key={s} value={s}>{s}</option>)}
+              {subs.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
             </select>
           </Field>
         </div>
 
         {masterSpec && (
-          <div className="text-xs" style={{ marginTop: 8, padding: 8, background: 'var(--c-bg-sub)', borderRadius: 2, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div
+            className="text-xs"
+            style={{
+              marginTop: 8,
+              padding: 8,
+              background: 'var(--c-bg-sub)',
+              borderRadius: 2,
+              display: 'flex',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}
+          >
             {masterSpec.category && <SpecItem k="분류" v={masterSpec.category} />}
             {masterSpec.origin && <SpecItem k="구분" v={String(masterSpec.origin)} />}
             {masterSpec.powertrain && <SpecItem k="동력" v={String(masterSpec.powertrain)} />}
-            {masterSpec.displacement && <SpecItem k="배기량" v={`${masterSpec.displacement.toLocaleString()}cc`} />}
+            {masterSpec.displacement && (
+              <SpecItem k="배기량" v={`${masterSpec.displacement.toLocaleString()}cc`} />
+            )}
             {masterSpec.seats && <SpecItem k="승차" v={`${masterSpec.seats}인승`} />}
             {masterSpec.battery_kwh && <SpecItem k="배터리" v={`${masterSpec.battery_kwh}kWh`} />}
           </div>
@@ -526,22 +655,23 @@ export function AssetCreateForm() {
       {/* ── ③ 등록증 스펙 (OCR) ── */}
       <div className="form-section">
         <div className="form-section-title">
-          <i className="ph ph-file-text" />등록증 스펙
+          <i className="ph ph-file-text" />
+          등록증 스펙
           <span className="text-text-muted text-2xs" style={{ fontWeight: 400, marginLeft: 8 }}>
             등록증 업로드 시 자동 채움
           </span>
         </div>
 
         {/* 등록증 업로드 */}
-        <label
-          className="jpk-uploader-drop"
-          style={{ marginBottom: 12, padding: 12 }}
-        >
+        <label className="jpk-uploader-drop" style={{ marginBottom: 12, padding: 12 }}>
           <input
             type="file"
             accept="application/pdf,image/*"
             hidden
-            onChange={(e) => { if (e.target.files?.[0]) handleRegUpload(e.target.files[0]); e.target.value = ''; }}
+            onChange={(e) => {
+              if (e.target.files?.[0]) handleRegUpload(e.target.files[0]);
+              e.target.value = '';
+            }}
           />
           <i className="ph ph-file-arrow-up" style={{ fontSize: 18 }} />
           <div>
@@ -557,12 +687,20 @@ export function AssetCreateForm() {
             <TextInput value={vin} onChange={(e) => setVin(e.target.value)} placeholder="17자리" />
           </Field>
           <Field label="연식">
-            <NumberInput value={carYear} onChange={(e) => setCarYear(e.target.value)} placeholder="2024" />
+            <NumberInput
+              value={carYear}
+              onChange={(e) => setCarYear(e.target.value)}
+              placeholder="2024"
+            />
           </Field>
         </div>
         <div className="form-row" style={{ marginTop: 12 }}>
           <Field label="배기량 (cc)">
-            <NumberInput value={displacement} onChange={(e) => setDisplacement(e.target.value)} placeholder="2199" />
+            <NumberInput
+              value={displacement}
+              onChange={(e) => setDisplacement(e.target.value)}
+              placeholder="2199"
+            />
           </Field>
           <Field label="승차정원">
             <NumberInput value={seats} onChange={(e) => setSeats(e.target.value)} placeholder="5" />
@@ -575,10 +713,18 @@ export function AssetCreateForm() {
         </div>
         <div className="form-row" style={{ marginTop: 12 }}>
           <Field label="형식번호">
-            <TextInput value={typeNumber} onChange={(e) => setTypeNumber(e.target.value)} placeholder="NKC90D" />
+            <TextInput
+              value={typeNumber}
+              onChange={(e) => setTypeNumber(e.target.value)}
+              placeholder="NKC90D"
+            />
           </Field>
           <Field label="원동기형식">
-            <TextInput value={engineType} onChange={(e) => setEngineType(e.target.value)} placeholder="D4HB" />
+            <TextInput
+              value={engineType}
+              onChange={(e) => setEngineType(e.target.value)}
+              placeholder="D4HB"
+            />
           </Field>
         </div>
         <div className="form-row" style={{ marginTop: 12 }}>
@@ -591,14 +737,63 @@ export function AssetCreateForm() {
         </div>
         <div style={{ marginTop: 12 }}>
           <Field label="소유자">
-            <TextInput value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder="법인명 또는 개인명" />
+            <TextInput
+              value={ownerName}
+              onChange={(e) => setOwnerName(e.target.value)}
+              placeholder="법인명 또는 개인명"
+            />
           </Field>
         </div>
       </div>
 
-      {/* ── ④ 상태 ── */}
+      {/* ── ④ 매입 정보 ── */}
       <div className="form-section">
-        <div className="form-section-title"><i className="ph ph-check-circle" />상태</div>
+        <div className="form-section-title">
+          <i className="ph ph-currency-krw" />
+          매입 정보
+          <span className="text-text-muted text-2xs" style={{ fontWeight: 400, marginLeft: 8 }}>
+            저장 시 결제방식에 따라 보험·할부 등록 안내
+          </span>
+        </div>
+        <div className="form-row">
+          <Field label="매입가">
+            <NumberInput
+              value={acquisitionCost}
+              onChange={(e) => setAcquisitionCost(e.target.value)}
+              placeholder="0"
+            />
+          </Field>
+          <Field label="매입일자">
+            <DateInput
+              value={acquisitionDate}
+              onChange={(e) => setAcquisitionDate(e.target.value)}
+            />
+          </Field>
+        </div>
+        <div className="form-row" style={{ marginTop: 12 }}>
+          <Field label="매입처(딜러)">
+            <TextInput
+              value={dealerName}
+              onChange={(e) => setDealerName(e.target.value)}
+              placeholder="예: 현대모터스 강남 딜러"
+            />
+          </Field>
+          <Field label="결제방식">
+            <BtnGroup
+              value={paymentType}
+              onChange={setPaymentType}
+              options={['일시불', '할부', '리스']}
+            />
+          </Field>
+        </div>
+      </div>
+
+      {/* ── ⑤ 상태 ── */}
+      <div className="form-section">
+        <div className="form-section-title">
+          <i className="ph ph-check-circle" />
+          상태
+        </div>
         <Field label="자산 상태">
           <BtnGroup value={status} onChange={setStatus} options={ASSET_STATUS_OPTS} />
         </Field>

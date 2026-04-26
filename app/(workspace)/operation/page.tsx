@@ -11,9 +11,12 @@
 import { useAuth } from '@/lib/auth/context';
 import { useRtdbCollection } from '@/lib/collections/rtdb';
 import { saveEvent } from '@/lib/firebase/events';
+import { getRtdb } from '@/lib/firebase/rtdb';
 import { uploadFiles } from '@/lib/firebase/storage';
 import { sanitizeCarNumber } from '@/lib/format-input';
-import type { RtdbBilling } from '@/lib/types/rtdb-entities';
+import { downloadSettlementPdf } from '@/lib/settlement-pdf';
+import type { RtdbAsset, RtdbBilling, RtdbContract } from '@/lib/types/rtdb-entities';
+import { ref, serverTimestamp, update } from 'firebase/database';
 import { useSearchParams } from 'next/navigation';
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -301,7 +304,7 @@ function useWizardSave() {
       payload: Record<string, unknown> & { type: string };
       validate?: () => string | null;
       successMsg?: string;
-      onSuccess?: () => void;
+      onSuccess?: () => void | Promise<void>;
       files?: File[];
       filesBasePath?: string;
     }) => {
@@ -326,7 +329,7 @@ function useWizardSave() {
         };
         await saveEvent(enriched);
         toast.success(successMsg ?? '저장 완료');
-        onSuccess?.();
+        await onSuccess?.();
       } catch (e) {
         toast.error(`저장 실패: ${(e as Error).message}`);
       } finally {
@@ -963,6 +966,8 @@ function ChulgoWizard() {
    ════════════════════════════════════════════════ */
 function BanabWizard() {
   const { saving, save } = useWizardSave();
+  const contracts = useRtdbCollection<RtdbContract>('contracts');
+  const assets = useRtdbCollection<RtdbAsset>('assets');
   const [contract, setContract] = useState('');
   const [reason, setReason] = useState<readonly string[]>(['정산반납 (만기)']);
   const [date, setDate] = useState(todayStr());
@@ -983,12 +988,74 @@ function BanabWizard() {
     setDeposit('');
   };
 
+  /** 입력된 contract(코드 또는 차번호)와 일치하는 contracts row 찾기 */
+  const findContract = useCallback((): RtdbContract | null => {
+    const q = contract.trim();
+    if (!q) return null;
+    const car = sanitizeCarNumber(q);
+    return (
+      contracts.data.find((c) => c.contract_code === q) ??
+      contracts.data.find((c) => c.car_number === car && c.status !== 'deleted') ??
+      null
+    );
+  }, [contract, contracts.data]);
+
+  /** 반납 후속 작업: asset.status='idle' + 정산서 PDF 다운로드 */
+  const finalizeReturn = useCallback(async () => {
+    const c = findContract();
+    if (!c) {
+      toast.warning('계약 매칭 실패 — 정산서/자산 상태 갱신 생략');
+      return;
+    }
+
+    // 자산 상태를 휴차로 전환
+    try {
+      const carNum = c.car_number;
+      const asset = carNum ? assets.data.find((a) => a.car_number === carNum && a._key) : undefined;
+      if (asset?._key) {
+        await update(ref(getRtdb(), `assets/${asset._key}`), {
+          status: 'idle',
+          asset_status: '차고지대기',
+          updated_at: serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      toast.warning(`자산 상태 갱신 실패: ${(e as Error).message}`);
+    }
+
+    // 정산서 PDF 다운로드
+    try {
+      const detailModel =
+        (c.car_number && assets.data.find((a) => a.car_number === c.car_number)?.detail_model) ||
+        '';
+      downloadSettlementPdf({
+        contract_code: c.contract_code,
+        contractor_name: c.contractor_name,
+        contractor_phone: c.contractor_phone,
+        car_number: c.car_number,
+        detail_model: detailModel,
+        start_date: c.start_date,
+        end_date: c.end_date,
+        return_date: date,
+        return_reason: reason[0],
+        return_mileage: mileage ? Number(mileage.replace(/,/g, '')) : undefined,
+        return_fuel: fuel[0],
+        damage,
+        extra_charges: extras,
+        deposit_refund: deposit ? Number(String(deposit).replace(/,/g, '')) : undefined,
+      });
+      toast.success('정산서 PDF 다운로드');
+    } catch (e) {
+      toast.warning(`정산서 PDF 실패: ${(e as Error).message}`);
+    }
+  }, [findContract, assets.data, date, reason, mileage, fuel, damage, extras, deposit]);
+
   return (
     <WizardShell
       icon="ph-tray-arrow-down"
       title="반납"
       desc="정산 + 사유 4종"
-      footDesc="정산서 PDF 자동 생성 예정"
+      footDesc="저장 시 자산 휴차 전환 + 정산서 PDF 자동 다운로드"
       footPrimary="반납 완료"
       saving={saving}
       onCancel={reset}
@@ -1013,7 +1080,10 @@ function BanabWizard() {
             return null;
           },
           successMsg: '반납 저장 완료',
-          onSuccess: reset,
+          onSuccess: async () => {
+            await finalizeReturn();
+            reset();
+          },
         })
       }
       body={

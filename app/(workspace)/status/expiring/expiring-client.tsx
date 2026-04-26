@@ -1,14 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type Ref, type RefObject } from 'react';
-import { useRtdbCollection } from '@/lib/collections/rtdb';
 import { JpkGrid, type JpkGridApi } from '@/components/shared/jpk-grid';
+import { useRtdbCollection } from '@/lib/collections/rtdb';
+import { computeContractEnd, daysBetween, normalizeDate, today } from '@/lib/date-utils';
 import { JpkSetFilter } from '@/lib/grid/set-filter';
 import { rowNumColumn } from '@/lib/grid/typed-column';
-import { normalizeDate, computeContractEnd, today, daysBetween } from '@/lib/date-utils';
 import type { RtdbAsset, RtdbContract } from '@/lib/types/rtdb-entities';
 import { fmtDate } from '@/lib/utils';
 import type { ColDef } from 'ag-grid-community';
+import { useRouter } from 'next/navigation';
+import { type Ref, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 
 export interface ExpiringRow {
   contract_code: string;
@@ -32,6 +33,7 @@ interface Props {
 export function ExpiringClient({ gridRef: externalRef, onCountChange }: Props = {}) {
   const internalRef = useRef<JpkGridApi<ExpiringRow> | null>(null);
   const gridRef = externalRef ?? internalRef;
+  const router = useRouter();
   const assets = useRtdbCollection<RtdbAsset>('assets');
   const contracts = useRtdbCollection<RtdbContract>('contracts');
   const [rangeMonths, setRangeMonths] = useState(3);
@@ -69,7 +71,9 @@ export function ExpiringClient({ gridRef: externalRef, onCountChange }: Props = 
       .sort((a, b) => a.d_day - b.d_day);
   }, [assets.data, contracts.data, rangeMonths]);
 
-  useEffect(() => { onCountChange?.(rows.length); }, [rows.length, onCountChange]);
+  useEffect(() => {
+    onCountChange?.(rows.length);
+  }, [rows.length, onCountChange]);
 
   const columnDefs = useMemo<ColDef<ExpiringRow>[]>(
     () =>
@@ -78,11 +82,33 @@ export function ExpiringClient({ gridRef: externalRef, onCountChange }: Props = 
         { headerName: '회사코드', field: 'partner_code', width: 80, filter: JpkSetFilter },
         { headerName: '계약자', field: 'contractor_name', width: 85 },
         { headerName: '연락처', field: 'contractor_phone', width: 110 },
-        { headerName: '차량번호', field: 'car_number', width: 95, cellStyle: { fontWeight: '600' } },
+        {
+          headerName: '차량번호',
+          field: 'car_number',
+          width: 95,
+          cellStyle: { fontWeight: '600' },
+        },
         { headerName: '세부모델', field: 'detail_model', flex: 1, minWidth: 140 },
-        { headerName: '계약기간', field: 'rent_months', width: 75, filter: false, cellStyle: { textAlign: 'right' }, valueFormatter: (p: { value: unknown }) => (p.value ? `${p.value}개월` : '-') },
-        { headerName: '시작일', field: 'start_date', width: 90, valueFormatter: (p: { value: unknown }) => fmtDate(p.value as string) },
-        { headerName: '종료일', field: 'end_date', width: 90, valueFormatter: (p: { value: unknown }) => fmtDate(p.value as string) },
+        {
+          headerName: '계약기간',
+          field: 'rent_months',
+          width: 75,
+          filter: false,
+          cellStyle: { textAlign: 'right' },
+          valueFormatter: (p: { value: unknown }) => (p.value ? `${p.value}개월` : '-'),
+        },
+        {
+          headerName: '시작일',
+          field: 'start_date',
+          width: 90,
+          valueFormatter: (p: { value: unknown }) => fmtDate(p.value as string),
+        },
+        {
+          headerName: '종료일',
+          field: 'end_date',
+          width: 90,
+          valueFormatter: (p: { value: unknown }) => fmtDate(p.value as string),
+        },
         {
           headerName: 'D-day',
           field: 'd_day',
@@ -99,13 +125,40 @@ export function ExpiringClient({ gridRef: externalRef, onCountChange }: Props = 
           },
           valueFormatter: (p: { value: unknown }) => `D-${p.value}`,
         },
+        {
+          headerName: '연장',
+          field: 'contract_code',
+          width: 70,
+          filter: false,
+          sortable: false,
+          cellRenderer: (p: { data?: ExpiringRow }) => {
+            const code = p.data?.contract_code;
+            if (!code) return '';
+            return (
+              <button
+                type="button"
+                className="btn btn-xs btn-outline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  router.push(`/input?type=extension&contract=${encodeURIComponent(code)}`);
+                }}
+              >
+                <i className="ph ph-arrow-clockwise" />
+                연장
+              </button>
+            );
+          },
+        },
       ] as ColDef<ExpiringRow>[],
-    [],
+    [router],
   );
 
   if (contracts.loading) {
     return (
-      <div className="flex items-center justify-center gap-2 text-text-muted" style={{ height: '100%', minHeight: 200 }}>
+      <div
+        className="flex items-center justify-center gap-2 text-text-muted"
+        style={{ height: '100%', minHeight: 200 }}
+      >
         <i className="ph ph-spinner spin" /> 로드 중...
       </div>
     );
