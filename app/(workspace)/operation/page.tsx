@@ -13,6 +13,13 @@ import { useRtdbCollection } from '@/lib/collections/rtdb';
 import { saveEvent } from '@/lib/firebase/events';
 import { getRtdb } from '@/lib/firebase/rtdb';
 import { uploadFiles } from '@/lib/firebase/storage';
+import {
+  type UploadFileType,
+  fileFingerprint,
+  findUploadByFingerprint,
+  saveUpload,
+  updateUpload,
+} from '@/lib/firebase/uploads';
 import { sanitizeCarNumber } from '@/lib/format-input';
 import { downloadSettlementPdf } from '@/lib/settlement-pdf';
 import type { RtdbAsset, RtdbBilling, RtdbContract } from '@/lib/types/rtdb-entities';
@@ -342,6 +349,19 @@ function useWizardSave() {
   return { saving, save };
 }
 
+function detectFileType(f: File): UploadFileType {
+  const name = f.name.toLowerCase();
+  if (name.endsWith('.csv')) return 'csv';
+  if (name.endsWith('.pdf')) return 'pdf';
+  if (name.endsWith('.xlsx') || name.endsWith('.xls')) return 'xlsx';
+  const mt = f.type.toLowerCase();
+  if (mt.startsWith('image/')) return 'image';
+  if (mt === 'application/pdf') return 'pdf';
+  if (mt.includes('csv')) return 'csv';
+  if (mt.includes('sheet') || mt.includes('excel')) return 'xlsx';
+  return 'unknown';
+}
+
 /* ════════════════════════════════════════════════
    1. 업로드 — 다중 파일 첨부 + 종류 분류
    ════════════════════════════════════════════════ */
@@ -367,6 +387,37 @@ function UploadWizard() {
     }
     setSaving(true);
     try {
+      // ── 파일 지문 기반 중복 업로드 차단 (V1 노하우) ──
+      // 같은 파일 + 같은 크기 조합이 이미 업로드 이력에 있으면 경고 후 중단.
+      const fps = files.map((f) => fileFingerprint(f.name, f.size, ''));
+      for (let i = 0; i < files.length; i++) {
+        const dup = await findUploadByFingerprint(fps[i]);
+        if (dup) {
+          const ago = dup.uploaded_at ? new Date(dup.uploaded_at).toLocaleString('ko-KR') : '';
+          toast.warning(
+            `'${files[i].name}' 은(는) 이미 업로드된 파일입니다 (${ago}). 새 파일이라면 이름을 바꿔서 다시 시도해주세요.`,
+          );
+          return;
+        }
+      }
+
+      // ── 업로드 이력 기록 (pending) ──
+      const uploadKey = await saveUpload({
+        filename: files
+          .map((f) => f.name)
+          .join(', ')
+          .slice(0, 200),
+        file_type: detectFileType(files[0]),
+        file_size: files.reduce((s, f) => s + f.size, 0),
+        detected_label: kind[0],
+        row_count: files.length,
+        fingerprint: fps[0], // 첫 파일 기준 (다중 파일은 첫 항목으로 dedup)
+        handler_uid: user?.uid,
+        handler: user?.displayName ?? user?.email ?? undefined,
+        note: memo || undefined,
+      });
+
+      // ── Storage 업로드 + events 미러 ──
       const basePath = `events/upload/${user?.uid ?? 'anon'}/${Date.now()}`;
       const photo_urls = await uploadFiles(basePath, files);
       await saveEvent({
@@ -376,11 +427,20 @@ function UploadWizard() {
         car_number: target ? sanitizeCarNumber(target) : undefined,
         memo: memo || undefined,
         upload_kind: kind[0],
+        upload_key: uploadKey,
         photo_urls,
         handler_uid: user?.uid,
         handler: user?.displayName ?? user?.email ?? undefined,
       });
-      toast.success(`${files.length}개 파일 업로드 완료`);
+
+      // ── 이력 처리 완료 ──
+      await updateUpload(uploadKey, {
+        status: 'processed',
+        processed_at: Date.now(),
+        results: { ok: files.length, skip: 0, fail: 0 },
+      });
+
+      toast.success(`${files.length}개 파일 업로드 완료 (이력 등록)`);
       reset();
     } catch (e) {
       toast.error(`업로드 실패: ${(e as Error).message}`);
