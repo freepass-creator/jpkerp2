@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type Ref, type RefObject } from 'react';
-import { useRtdbCollection } from '@/lib/collections/rtdb';
 import { JpkGrid, type JpkGridApi } from '@/components/shared/jpk-grid';
-import { typedColumn, rowNumColumn } from '@/lib/grid/typed-column';
 import { KpiCard } from '@/components/shared/kpi-card';
+import { useRtdbCollection } from '@/lib/collections/rtdb';
+import { rowNumColumn, typedColumn } from '@/lib/grid/typed-column';
+import { classifyExpense } from '@/lib/match-engine';
 import type { RtdbEvent } from '@/lib/types/rtdb-entities';
 import { fmt, fmtDate } from '@/lib/utils';
 import type { ColDef } from 'ag-grid-community';
+import { type Ref, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 
 type Tab = 'all' | 'bank' | 'card';
 
@@ -23,13 +24,17 @@ export function LedgerClient({ gridRef: externalRef, onCountChange }: Props = {}
   const [tab, setTab] = useState<Tab>('all');
 
   const rows = useMemo(() => {
-    let data = events.data.filter((e) => (e.type === 'bank_tx' || e.type === 'card_tx') && e.status !== 'deleted');
+    let data = events.data.filter(
+      (e) => (e.type === 'bank_tx' || e.type === 'card_tx') && e.status !== 'deleted',
+    );
     if (tab === 'bank') data = data.filter((e) => e.type === 'bank_tx');
     else if (tab === 'card') data = data.filter((e) => e.type === 'card_tx');
     return data.sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')));
   }, [events.data, tab]);
 
-  useEffect(() => { onCountChange?.(rows.length); }, [rows.length, onCountChange]);
+  useEffect(() => {
+    onCountChange?.(rows.length);
+  }, [rows.length, onCountChange]);
 
   const summary = useMemo(() => {
     let inflow = 0;
@@ -47,15 +52,40 @@ export function LedgerClient({ gridRef: externalRef, onCountChange }: Props = {}
   const cols = useMemo<ColDef<RtdbEvent>[]>(
     () => [
       rowNumColumn(),
-      typedColumn('date',   { headerName: '일자', field: 'date', width: 100, valueFormatter: (p) => fmtDate(p.value as string), sort: 'desc' }),
+      typedColumn('date', {
+        headerName: '일자',
+        field: 'date',
+        width: 100,
+        valueFormatter: (p) => fmtDate(p.value as string),
+        sort: 'desc',
+      }),
       typedColumn('select', {
         headerName: '유형',
         field: 'type',
         width: 75,
-        cellStyle: (p) => ({ fontWeight: '600', color: p.value === 'bank_tx' ? 'var(--c-info)' : 'var(--c-primary)' }),
-        valueFormatter: (p) => (p.value === 'bank_tx' ? '통장' : p.value === 'card_tx' ? '카드' : '-'),
+        cellStyle: (p) => ({
+          fontWeight: '600',
+          color: p.value === 'bank_tx' ? 'var(--c-info)' : 'var(--c-primary)',
+        }),
+        valueFormatter: (p) =>
+          p.value === 'bank_tx' ? '통장' : p.value === 'card_tx' ? '카드' : '-',
       }),
-      typedColumn('text',   { headerName: '거래처', field: 'title', flex: 1, minWidth: 200 }),
+      typedColumn('text', { headerName: '거래처', field: 'title', flex: 1, minWidth: 200 }),
+      typedColumn('select', {
+        headerName: '분류',
+        field: 'expense_category',
+        width: 95,
+        cellStyle: { color: 'var(--c-text-sub)', fontWeight: '500' },
+        // 출금만 자동분류 — 입금은 매칭 컬럼에서 별도 처리
+        valueGetter: (p) => {
+          const e = p.data as RtdbEvent | undefined;
+          if (!e) return '';
+          const amt = Number(e.amount) || 0;
+          if (amt >= 0) return ''; // 입금
+          const text = `${e.counterparty ?? ''} ${e.title ?? ''} ${e.summary ?? ''} ${e.memo ?? ''}`;
+          return classifyExpense(text).category;
+        },
+      }),
       typedColumn('number', {
         headerName: '금액',
         field: 'amount',
@@ -65,7 +95,12 @@ export function LedgerClient({ gridRef: externalRef, onCountChange }: Props = {}
           textAlign: 'right',
           fontVariantNumeric: 'tabular-nums',
           fontWeight: '600',
-          color: Number(p.value) > 0 ? 'var(--c-success)' : Number(p.value) < 0 ? 'var(--c-danger)' : 'var(--c-text-muted)',
+          color:
+            Number(p.value) > 0
+              ? 'var(--c-success)'
+              : Number(p.value) < 0
+                ? 'var(--c-danger)'
+                : 'var(--c-text-muted)',
         }),
       }),
       typedColumn('select', {
@@ -74,25 +109,44 @@ export function LedgerClient({ gridRef: externalRef, onCountChange }: Props = {}
         width: 95,
         cellStyle: (p) => {
           const v = p.value as string;
-          const color = v === 'matched' ? 'var(--c-success)'
-            : v === 'candidate' ? 'var(--c-primary)'
-            : v === 'ignored' ? 'var(--c-text-muted)'
-            : 'var(--c-warn)';
+          const color =
+            v === 'matched'
+              ? 'var(--c-success)'
+              : v === 'candidate'
+                ? 'var(--c-primary)'
+                : v === 'ignored'
+                  ? 'var(--c-text-muted)'
+                  : 'var(--c-warn)';
           return { color, fontWeight: '600' };
         },
         valueFormatter: (p) => {
           const v = p.value as string;
-          return v === 'matched' ? '매칭완료' : v === 'candidate' ? '후보제안' : v === 'ignored' ? '무시' : '미매칭';
+          return v === 'matched'
+            ? '매칭완료'
+            : v === 'candidate'
+              ? '후보제안'
+              : v === 'ignored'
+                ? '무시'
+                : '미매칭';
         },
       }),
-      typedColumn('text', { headerName: '메모', field: 'memo', flex: 1, minWidth: 160, cellStyle: { color: 'var(--c-text-muted)' } }),
+      typedColumn('text', {
+        headerName: '메모',
+        field: 'memo',
+        flex: 1,
+        minWidth: 160,
+        cellStyle: { color: 'var(--c-text-muted)' },
+      }),
     ],
     [],
   );
 
   if (events.loading) {
     return (
-      <div className="flex items-center justify-center gap-2 text-text-muted" style={{ height: '100%', minHeight: 200 }}>
+      <div
+        className="flex items-center justify-center gap-2 text-text-muted"
+        style={{ height: '100%', minHeight: 200 }}
+      >
         <i className="ph ph-spinner spin" /> 로드 중...
       </div>
     );
@@ -103,7 +157,11 @@ export function LedgerClient({ gridRef: externalRef, onCountChange }: Props = {}
       <div className="grid grid-cols-4 gap-3 p-4 border-b border-border">
         <KpiCard label="입금" value={`${fmt(summary.inflow)}원`} tone="success" />
         <KpiCard label="출금" value={`${fmt(summary.outflow)}원`} tone="danger" />
-        <KpiCard label="순 입금" value={`${summary.inflow - summary.outflow >= 0 ? '+' : ''}${fmt(summary.inflow - summary.outflow)}원`} tone="primary" />
+        <KpiCard
+          label="순 입금"
+          value={`${summary.inflow - summary.outflow >= 0 ? '+' : ''}${fmt(summary.inflow - summary.outflow)}원`}
+          tone="primary"
+        />
         <KpiCard label="미매칭" value={`${fmt(summary.unmatched)}건`} tone="warn" />
       </div>
       <div className="flex items-center gap-1 px-4 py-2 border-b border-border">
