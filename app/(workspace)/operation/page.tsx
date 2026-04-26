@@ -4,11 +4,16 @@
  * 업무관리 (v3) — 12 탭 wizard 모음.
  *
  * 디자인은 jpkerp-v3/prototype.html `data-page="journal"` 기준이며,
- * 본 페이지는 디자인 mock + option-row 토글 동작만 구현한다.
- * 실제 저장 로직은 Phase 7 이후에 붙는다.
+ * 본 페이지는 wizard 디자인을 유지하면서 각 [저장] 버튼이 RTDB events 컬렉션에
+ * 실제로 push 하도록 wire-up 됨 (Phase 11 — 입력 wire-up).
  */
 
-import { type ReactNode, useState } from 'react';
+import { useAuth } from '@/lib/auth/context';
+import { saveEvent } from '@/lib/firebase/events';
+import { uploadFiles } from '@/lib/firebase/storage';
+import { sanitizeCarNumber } from '@/lib/format-input';
+import { type ReactNode, useCallback, useState } from 'react';
+import { toast } from 'sonner';
 
 type SubpageId =
   | 'journal-upload'
@@ -66,6 +71,11 @@ const TAB_CRUMB: Record<SubpageId, string> = {
   'journal-sent': '시킨요청',
 };
 
+function todayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function OperationPage() {
   const [active, setActive] = useState<SubpageId>('journal-upload');
   const activeTab = TABS.find((t) => t.id === active) ?? TABS[0];
@@ -92,13 +102,6 @@ export default function OperationPage() {
             </button>
           ))}
         </div>
-        {activeTab.primaryAction && (
-          <div className="action">
-            <button type="button" disabled>
-              {activeTab.primaryAction}
-            </button>
-          </div>
-        )}
       </div>
 
       {active === 'journal-upload' && <UploadWizard />}
@@ -123,19 +126,20 @@ export default function OperationPage() {
 
 function OptionGroup({
   options,
-  defaultSelected,
+  value,
+  onChange,
   multi = false,
 }: {
   options: readonly string[];
-  defaultSelected?: readonly string[];
+  value: readonly string[];
+  onChange: (value: readonly string[]) => void;
   multi?: boolean;
 }) {
-  const [selected, setSelected] = useState<readonly string[]>(defaultSelected ?? []);
   const toggle = (opt: string) => {
     if (multi) {
-      setSelected((prev) => (prev.includes(opt) ? prev.filter((x) => x !== opt) : [...prev, opt]));
+      onChange(value.includes(opt) ? value.filter((x) => x !== opt) : [...value, opt]);
     } else {
-      setSelected([opt]);
+      onChange([opt]);
     }
   };
   return (
@@ -144,7 +148,7 @@ function OptionGroup({
         <button
           key={opt}
           type="button"
-          className={`option-btn ${selected.includes(opt) ? 'is-selected' : ''}`}
+          className={`option-btn ${value.includes(opt) ? 'is-selected' : ''}`}
           onClick={() => toggle(opt)}
         >
           {opt}
@@ -172,7 +176,7 @@ function FormRow({
   );
 }
 
-/* wizard 셸 */
+/* wizard 셸 — onSubmit 받아서 [저장] 버튼 wire-up */
 function WizardShell({
   icon,
   iconClass,
@@ -182,6 +186,9 @@ function WizardShell({
   footDesc,
   footPrimary,
   footPrimaryDanger = false,
+  saving,
+  onSave,
+  onCancel,
 }: {
   icon: string;
   iconClass?: string;
@@ -191,6 +198,9 @@ function WizardShell({
   footDesc?: ReactNode;
   footPrimary: string;
   footPrimaryDanger?: boolean;
+  saving?: boolean;
+  onSave: () => void | Promise<void>;
+  onCancel?: () => void;
 }) {
   return (
     <div className="v3-wizard">
@@ -205,9 +215,18 @@ function WizardShell({
           <span className={`desc ${footPrimaryDanger ? 't-danger' : ''}`}>{footDesc}</span>
         )}
         <div className="actions">
-          <button type="button">취소</button>
-          <button type="button" className="primary">
-            {footPrimary}
+          <button type="button" onClick={onCancel} disabled={saving}>
+            {onCancel ? '초기화' : '취소'}
+          </button>
+          <button
+            type="button"
+            className="primary"
+            disabled={saving}
+            onClick={() => {
+              void onSave();
+            }}
+          >
+            {saving ? '저장 중...' : footPrimary}
           </button>
         </div>
       </div>
@@ -215,54 +234,130 @@ function WizardShell({
   );
 }
 
+/* useWizardSave — 저장 공통 흐름: validate → saveEvent → toast → reset */
+function useWizardSave() {
+  const { user } = useAuth();
+  const [saving, setSaving] = useState(false);
+
+  const save = useCallback(
+    async (params: {
+      payload: Record<string, unknown> & { type: string };
+      validate?: () => string | null;
+      successMsg?: string;
+      onSuccess?: () => void;
+      files?: File[];
+      filesBasePath?: string;
+    }) => {
+      const { payload, validate, successMsg, onSuccess, files, filesBasePath } = params;
+      const err = validate?.();
+      if (err) {
+        toast.error(err);
+        return;
+      }
+      setSaving(true);
+      try {
+        let photo_urls: string[] | undefined;
+        if (files && files.length > 0 && filesBasePath) {
+          photo_urls = await uploadFiles(filesBasePath, files);
+        }
+        const enriched: Parameters<typeof saveEvent>[0] = {
+          ...payload,
+          ...(photo_urls ? { photo_urls } : {}),
+          handler_uid: user?.uid,
+          handler: user?.displayName ?? user?.email ?? undefined,
+          date: (typeof payload.date === 'string' ? payload.date : null) ?? todayStr(),
+        };
+        await saveEvent(enriched);
+        toast.success(successMsg ?? '저장 완료');
+        onSuccess?.();
+      } catch (e) {
+        toast.error(`저장 실패: ${(e as Error).message}`);
+      } finally {
+        setSaving(false);
+      }
+    },
+    [user],
+  );
+
+  return { saving, save };
+}
+
 /* ════════════════════════════════════════════════
-   1. 업로드 — 스마트 업로드 + 대상 + 종류 + 메모
+   1. 업로드 — 다중 파일 첨부 + 종류 분류
    ════════════════════════════════════════════════ */
 function UploadWizard() {
+  const { user } = useAuth();
+  const [target, setTarget] = useState('');
+  const [kind, setKind] = useState<readonly string[]>(['자동 분류']);
+  const [memo, setMemo] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  const reset = () => {
+    setTarget('');
+    setKind(['자동 분류']);
+    setMemo('');
+    setFiles([]);
+  };
+
+  const onSave = async () => {
+    if (files.length === 0) {
+      toast.error('첨부 파일을 선택하세요');
+      return;
+    }
+    setSaving(true);
+    try {
+      const basePath = `events/upload/${user?.uid ?? 'anon'}/${Date.now()}`;
+      const photo_urls = await uploadFiles(basePath, files);
+      await saveEvent({
+        type: 'upload',
+        date: todayStr(),
+        title: kind[0] ?? '업로드',
+        car_number: target ? sanitizeCarNumber(target) : undefined,
+        memo: memo || undefined,
+        upload_kind: kind[0],
+        photo_urls,
+        handler_uid: user?.uid,
+        handler: user?.displayName ?? user?.email ?? undefined,
+      });
+      toast.success(`${files.length}개 파일 업로드 완료`);
+      reset();
+    } catch (e) {
+      toast.error(`업로드 실패: ${(e as Error).message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <WizardShell
       icon="ph-upload-simple"
       title="업로드"
-      desc="사진 OCR · PDF 추출 · 구글시트 임포트 · 다중 첨부"
-      footDesc="업로드 후 OCR 결과를 검토 → 저장하면 해당 위저드로 자동 이동"
-      footPrimary="업로드 + 분석"
+      desc="사진 OCR · PDF 추출 · 다중 첨부"
+      footDesc={files.length > 0 ? `${files.length}개 파일 선택됨` : '파일을 선택한 뒤 저장하세요'}
+      footPrimary="업로드"
+      saving={saving}
+      onSave={onSave}
+      onCancel={reset}
       body={
         <>
-          <FormRow label="입력 방식">
-            <div className="smart-upload">
-              <button type="button" className="upload-btn">
-                <i className="ph ph-camera" />
-                <span className="nm">사진</span>
-                <span className="sub">OCR 자동</span>
-              </button>
-              <button type="button" className="upload-btn">
-                <i className="ph ph-file-pdf" />
-                <span className="nm">PDF/문서</span>
-                <span className="sub">텍스트 추출</span>
-              </button>
-              <button type="button" className="upload-btn">
-                <i className="ph ph-table" />
-                <span className="nm">구글시트</span>
-                <span className="sub">URL 임포트</span>
-              </button>
-              <button type="button" className="upload-btn">
-                <i className="ph ph-images" />
-                <span className="nm">갤러리</span>
-                <span className="sub">다중 첨부</span>
-              </button>
-            </div>
-            <div className="smart-hint">
-              <i className="ph ph-magic-wand" />
-              AI가 업로드 내용을 인식 → 자동 분류 (차량등록증·보험증권·과태료·견적서 등) → 해당
-              위저드로 자동 라우팅
-            </div>
+          <FormRow label="첨부 파일" required>
+            <input
+              type="file"
+              multiple
+              accept="application/pdf,image/*"
+              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+            />
+            {files.length > 0 && <div className="hint">{files.map((f) => f.name).join(', ')}</div>}
           </FormRow>
           <FormRow label="대상 (선택)">
             <div className="picker-row">
-              <input type="text" placeholder="차량·계약 (없으면 자동 매칭 시도)" />
-              <button type="button" className="pick-btn">
-                선택
-              </button>
+              <input
+                type="text"
+                placeholder="차량번호 (없으면 미연결)"
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+              />
             </div>
           </FormRow>
           <FormRow label="업로드 종류">
@@ -279,11 +374,16 @@ function UploadWizard() {
                 '반납 사진',
                 '기타',
               ]}
-              defaultSelected={['자동 분류']}
+              value={kind}
+              onChange={setKind}
             />
           </FormRow>
           <FormRow label="메모">
-            <textarea placeholder="업로드 관련 메모 (선택)" />
+            <textarea
+              placeholder="업로드 관련 메모 (선택)"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+            />
           </FormRow>
         </>
       }
@@ -295,6 +395,21 @@ function UploadWizard() {
    2. 고객응대
    ════════════════════════════════════════════════ */
 function EungdaeWizard() {
+  const { saving, save } = useWizardSave();
+  const [channel, setChannel] = useState<readonly string[]>(['전화']);
+  const [target, setTarget] = useState('');
+  const [topic, setTopic] = useState<readonly string[]>(['미납독촉']);
+  const [actions, setActions] = useState<readonly string[]>([]);
+  const [memo, setMemo] = useState('');
+
+  const reset = () => {
+    setChannel(['전화']);
+    setTarget('');
+    setTopic(['미납독촉']);
+    setActions([]);
+    setMemo('');
+  };
+
   return (
     <WizardShell
       icon="ph-phone"
@@ -302,40 +417,69 @@ function EungdaeWizard() {
       desc="통화·방문·민원·문의"
       footDesc="필수 3종 입력 완료 · 평균 30초 소요"
       footPrimary="저장"
+      saving={saving}
+      onCancel={reset}
+      onSave={() =>
+        save({
+          payload: {
+            type: 'consultation',
+            title: topic[0] ?? '고객응대',
+            car_number: target ? sanitizeCarNumber(target) : undefined,
+            contact_channel: channel[0],
+            contact_topic: topic[0],
+            contact_actions: actions,
+            memo: memo || undefined,
+          },
+          validate: () => {
+            if (!channel[0]) return '응대 방식을 선택하세요';
+            if (!target) return '대상을 입력하세요';
+            if (!topic[0]) return '주제를 선택하세요';
+            return null;
+          },
+          successMsg: '고객응대 저장 완료',
+          onSuccess: reset,
+        })
+      }
       body={
         <>
           <FormRow label="응대 방식" required>
             <OptionGroup
               options={['전화', '방문', '문자', '이메일', '대면', '기타']}
-              defaultSelected={['전화']}
+              value={channel}
+              onChange={setChannel}
             />
           </FormRow>
           <FormRow label="대상" required>
             <div className="picker-row">
-              <input type="text" placeholder="계약자·차량번호·계약코드 검색" />
-              <button type="button" className="pick-btn">
-                선택
-              </button>
+              <input
+                type="text"
+                placeholder="계약자·차량번호·계약코드"
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+              />
             </div>
             <div className="hint">예: J0012 홍길동 / 12가 3456</div>
           </FormRow>
           <FormRow label="주제" required>
             <OptionGroup
               options={['미납독촉', '갱신문의', '사고문의', '서류요청', '신규문의', '민원', '기타']}
-              defaultSelected={['미납독촉']}
+              value={topic}
+              onChange={setTopic}
             />
           </FormRow>
           <FormRow label="조치">
             <OptionGroup
               options={['안내완료', '재연락약속', '입금약속', '담당자전달', '서류발송']}
-              defaultSelected={['재연락약속', '입금약속']}
+              value={actions}
+              onChange={setActions}
               multi
             />
           </FormRow>
           <FormRow label="메모">
             <textarea
               placeholder="결과·다음 액션 메모 (선택)"
-              defaultValue="4-30 입금 약속, 미입금시 시동제어 예정"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
             />
           </FormRow>
         </>
@@ -348,6 +492,27 @@ function EungdaeWizard() {
    3. 차량수선
    ════════════════════════════════════════════════ */
 function SuseonWizard() {
+  const { saving, save } = useWizardSave();
+  const [maintType, setMaintType] = useState<readonly string[]>(['정기정비']);
+  const [carNumber, setCarNumber] = useState('');
+  const [vendor, setVendor] = useState<readonly string[]>([]);
+  const [vendorCustom, setVendorCustom] = useState('');
+  const [content, setContent] = useState('');
+  const [amount, setAmount] = useState('');
+  const [result, setResult] = useState<readonly string[]>(['완료']);
+  const [memo, setMemo] = useState('');
+
+  const reset = () => {
+    setMaintType(['정기정비']);
+    setCarNumber('');
+    setVendor([]);
+    setVendorCustom('');
+    setContent('');
+    setAmount('');
+    setResult(['완료']);
+    setMemo('');
+  };
+
   return (
     <WizardShell
       icon="ph-wrench"
@@ -355,42 +520,94 @@ function SuseonWizard() {
       desc="정비·수리·상품화·외관관리"
       footDesc="사진 첨부 권장"
       footPrimary="저장"
+      saving={saving}
+      onCancel={reset}
+      onSave={() =>
+        save({
+          payload: {
+            type: 'vehicle_repair',
+            title: content || maintType[0] || '수선',
+            car_number: carNumber ? sanitizeCarNumber(carNumber) : undefined,
+            maint_type: maintType[0],
+            vendor: vendor[0] === '+ 신규' ? vendorCustom : vendor[0],
+            content,
+            amount: amount ? Number(amount.replace(/,/g, '')) : undefined,
+            work_status: result[0],
+            memo: memo || undefined,
+          },
+          validate: () => {
+            if (!maintType[0]) return '수선 종류를 선택하세요';
+            if (!carNumber) return '차량번호를 입력하세요';
+            return null;
+          },
+          successMsg: '차량수선 저장 완료',
+          onSuccess: reset,
+        })
+      }
       body={
         <>
           <FormRow label="수선 종류" required>
             <OptionGroup
               options={['정기정비', '고장수리', '사고수리', '외관관리', '상품화', '점검만', '기타']}
-              defaultSelected={['정기정비']}
+              value={maintType}
+              onChange={setMaintType}
             />
           </FormRow>
           <FormRow label="차량" required>
             <div className="picker-row">
-              <input type="text" placeholder="차량번호 검색" defaultValue="34나 5678" />
-              <button type="button" className="pick-btn">
-                선택
-              </button>
+              <input
+                type="text"
+                placeholder="차량번호"
+                value={carNumber}
+                onChange={(e) => setCarNumber(e.target.value)}
+              />
             </div>
           </FormRow>
           <FormRow label="정비소">
             <OptionGroup
               options={['한국정비', '강남자동차정비', '토탈오토케어', '+ 신규']}
-              defaultSelected={['한국정비']}
+              value={vendor}
+              onChange={setVendor}
             />
+            {vendor[0] === '+ 신규' && (
+              <input
+                type="text"
+                placeholder="신규 정비소 이름"
+                value={vendorCustom}
+                onChange={(e) => setVendorCustom(e.target.value)}
+                style={{ marginTop: 6 }}
+              />
+            )}
           </FormRow>
           <FormRow label="내역">
-            <input type="text" defaultValue="엔진오일 교체" placeholder="작업 내역" />
+            <input
+              type="text"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="작업 내역"
+            />
           </FormRow>
           <FormRow label="비용">
-            <input type="text" defaultValue="80,000" placeholder="원" />
+            <input
+              type="text"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="원"
+            />
           </FormRow>
           <FormRow label="결과">
             <OptionGroup
               options={['완료', '진행중', '미수리 복귀', '견적 대기']}
-              defaultSelected={['완료']}
+              value={result}
+              onChange={setResult}
             />
           </FormRow>
-          <FormRow label="사진·메모">
-            <textarea placeholder="작업 사진 첨부 또는 추가 메모" />
+          <FormRow label="메모">
+            <textarea
+              placeholder="작업 사진 첨부 또는 추가 메모"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+            />
           </FormRow>
         </>
       }
@@ -402,6 +619,27 @@ function SuseonWizard() {
    4. 사고접수
    ════════════════════════════════════════════════ */
 function SagoWizard() {
+  const { saving, save } = useWizardSave();
+  const [target, setTarget] = useState('');
+  const [occurredAt, setOccurredAt] = useState('');
+  const [location, setLocation] = useState('');
+  const [accidentType, setAccidentType] = useState<readonly string[]>(['쌍방']);
+  const [otherInfo, setOtherInfo] = useState('');
+  const [insurance, setInsurance] = useState<readonly string[]>(['자차']);
+  const [receiptNo, setReceiptNo] = useState('');
+  const [memo, setMemo] = useState('');
+
+  const reset = () => {
+    setTarget('');
+    setOccurredAt('');
+    setLocation('');
+    setAccidentType(['쌍방']);
+    setOtherInfo('');
+    setInsurance(['자차']);
+    setReceiptNo('');
+    setMemo('');
+  };
+
   return (
     <WizardShell
       icon="ph-warning"
@@ -410,39 +648,97 @@ function SagoWizard() {
       desc="사건 발생 + 보험접수"
       footDesc="사진 첨부 필수 — 보험금 청구 근거"
       footPrimary="저장"
+      saving={saving}
+      onCancel={reset}
+      onSave={() =>
+        save({
+          payload: {
+            type: 'accident',
+            title: `사고 ${accidentType[0] ?? ''}`.trim(),
+            car_number: target ? sanitizeCarNumber(target) : undefined,
+            occurred_at: occurredAt || undefined,
+            date: occurredAt ? occurredAt.slice(0, 10) : todayStr(),
+            location: location || undefined,
+            accident_type: accidentType[0],
+            other_party: otherInfo || undefined,
+            insurance_kind: insurance[0],
+            receipt_no: receiptNo || undefined,
+            memo: memo || undefined,
+          },
+          validate: () => {
+            if (!target) return '차량/계약을 입력하세요';
+            if (!occurredAt) return '발생일시를 입력하세요';
+            if (!accidentType[0]) return '사고 종류를 선택하세요';
+            if (!insurance[0]) return '보험 처리를 선택하세요';
+            return null;
+          },
+          successMsg: '사고접수 저장 완료',
+          onSuccess: reset,
+        })
+      }
       body={
         <>
           <FormRow label="차량/계약" required>
             <div className="picker-row">
-              <input type="text" placeholder="차량번호·계약코드" />
-              <button type="button" className="pick-btn">
-                선택
-              </button>
+              <input
+                type="text"
+                placeholder="차량번호·계약코드"
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+              />
             </div>
           </FormRow>
           <FormRow label="발생일시" required>
-            <input type="datetime-local" defaultValue="2026-04-25T11:00" />
+            <input
+              type="datetime-local"
+              value={occurredAt}
+              onChange={(e) => setOccurredAt(e.target.value)}
+            />
           </FormRow>
           <FormRow label="사고 장소">
-            <input type="text" placeholder="주소 또는 위치" />
+            <input
+              type="text"
+              placeholder="주소 또는 위치"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+            />
           </FormRow>
           <FormRow label="사고 종류" required>
             <OptionGroup
               options={['단독', '쌍방', '주차사고', '추돌', '도난', '침수', '기타']}
-              defaultSelected={['쌍방']}
+              value={accidentType}
+              onChange={setAccidentType}
             />
           </FormRow>
           <FormRow label="상대 정보">
-            <input type="text" placeholder="상대 차량번호·연락처·과실비율" />
+            <input
+              type="text"
+              placeholder="상대 차량번호·연락처·과실비율"
+              value={otherInfo}
+              onChange={(e) => setOtherInfo(e.target.value)}
+            />
           </FormRow>
           <FormRow label="보험 처리" required>
-            <OptionGroup options={['자차', '대물', '자손', '미신청']} defaultSelected={['자차']} />
+            <OptionGroup
+              options={['자차', '대물', '자손', '미신청']}
+              value={insurance}
+              onChange={setInsurance}
+            />
           </FormRow>
           <FormRow label="접수번호">
-            <input type="text" placeholder="보험사 접수번호" />
+            <input
+              type="text"
+              placeholder="보험사 접수번호"
+              value={receiptNo}
+              onChange={(e) => setReceiptNo(e.target.value)}
+            />
           </FormRow>
-          <FormRow label="사진·메모">
-            <textarea placeholder="사고 사진 첨부 + 경위 메모" />
+          <FormRow label="메모">
+            <textarea
+              placeholder="사고 경위 메모"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+            />
           </FormRow>
         </>
       }
@@ -454,6 +750,32 @@ function SagoWizard() {
    5. 출고
    ════════════════════════════════════════════════ */
 function ChulgoWizard() {
+  const { saving, save } = useWizardSave();
+  const [contract, setContract] = useState('');
+  const [date, setDate] = useState(todayStr());
+  const [from, setFrom] = useState('차고지 A');
+  const [to, setTo] = useState('');
+  const [mileage, setMileage] = useState('');
+  const [fuel, setFuel] = useState<readonly string[]>(['가득']);
+  const [checks, setChecks] = useState<readonly string[]>([
+    '키 2개',
+    '매뉴얼',
+    '블랙박스 정상',
+    '외관 양호',
+  ]);
+  const [memo, setMemo] = useState('');
+
+  const reset = () => {
+    setContract('');
+    setDate(todayStr());
+    setFrom('차고지 A');
+    setTo('');
+    setMileage('');
+    setFuel(['가득']);
+    setChecks(['키 2개', '매뉴얼', '블랙박스 정상', '외관 양호']);
+    setMemo('');
+  };
+
   return (
     <WizardShell
       icon="ph-paper-plane-tilt"
@@ -461,43 +783,92 @@ function ChulgoWizard() {
       desc="인도 체크리스트 (계약 시작)"
       footDesc="사진은 반납 정산 기준이 됩니다"
       footPrimary="출고 완료"
+      saving={saving}
+      onCancel={reset}
+      onSave={() =>
+        save({
+          payload: {
+            type: 'release',
+            title: `출고 ${contract}`.trim(),
+            contract_code: contract || undefined,
+            date,
+            from_location: from || undefined,
+            to_location: to || undefined,
+            delivery_location: to || undefined,
+            mileage: mileage ? Number(mileage.replace(/,/g, '')) : undefined,
+            fuel_level: fuel[0],
+            checklist: checks,
+            memo: memo || undefined,
+          },
+          validate: () => {
+            if (!contract) return '계약을 입력하세요';
+            if (!mileage) return '주행거리를 입력하세요';
+            return null;
+          },
+          successMsg: '출고 등록 완료',
+          onSuccess: reset,
+        })
+      }
       body={
         <>
           <FormRow label="계약" required>
             <div className="picker-row">
-              <input type="text" placeholder="계약 검색" />
-              <button type="button" className="pick-btn">
-                선택
-              </button>
+              <input
+                type="text"
+                placeholder="계약코드 또는 차량번호"
+                value={contract}
+                onChange={(e) => setContract(e.target.value)}
+              />
             </div>
           </FormRow>
           <FormRow label="출고일자" required>
-            <input type="date" defaultValue="2026-04-25" />
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </FormRow>
           <FormRow label="출고지 → 인도지">
             <div className="picker-row">
-              <input type="text" placeholder="차고지 A" defaultValue="차고지 A" />
-              <input type="text" placeholder="고객 인도지" />
+              <input
+                type="text"
+                placeholder="차고지"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+              />
+              <input
+                type="text"
+                placeholder="고객 인도지"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+              />
             </div>
           </FormRow>
           <FormRow label="주행거리" required>
-            <input type="text" placeholder="km" />
+            <input
+              type="text"
+              placeholder="km"
+              value={mileage}
+              onChange={(e) => setMileage(e.target.value)}
+            />
           </FormRow>
           <FormRow label="연료 상태">
             <OptionGroup
               options={['가득', '3/4', '1/2', '1/4', '부족']}
-              defaultSelected={['가득']}
+              value={fuel}
+              onChange={setFuel}
             />
           </FormRow>
           <FormRow label="체크리스트">
             <OptionGroup
               options={['키 2개', '매뉴얼', '블랙박스 정상', '외관 양호', '손상 (사진)']}
-              defaultSelected={['키 2개', '매뉴얼', '블랙박스 정상', '외관 양호']}
+              value={checks}
+              onChange={setChecks}
               multi
             />
           </FormRow>
-          <FormRow label="인도 사진">
-            <textarea placeholder="외관·내부·주행거리 사진 (3~5장)" />
+          <FormRow label="메모">
+            <textarea
+              placeholder="외관·내부·주행거리 사진 (3~5장)"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+            />
           </FormRow>
         </>
       }
@@ -509,50 +880,120 @@ function ChulgoWizard() {
    6. 반납
    ════════════════════════════════════════════════ */
 function BanabWizard() {
+  const { saving, save } = useWizardSave();
+  const [contract, setContract] = useState('');
+  const [reason, setReason] = useState<readonly string[]>(['정산반납 (만기)']);
+  const [date, setDate] = useState(todayStr());
+  const [mileage, setMileage] = useState('');
+  const [fuel, setFuel] = useState<readonly string[]>(['1/2']);
+  const [damage, setDamage] = useState('');
+  const [extras, setExtras] = useState<readonly string[]>([]);
+  const [deposit, setDeposit] = useState('');
+
+  const reset = () => {
+    setContract('');
+    setReason(['정산반납 (만기)']);
+    setDate(todayStr());
+    setMileage('');
+    setFuel(['1/2']);
+    setDamage('');
+    setExtras([]);
+    setDeposit('');
+  };
+
   return (
     <WizardShell
       icon="ph-tray-arrow-down"
       title="반납"
       desc="정산 + 사유 4종"
-      footDesc="정산서 PDF 자동 생성"
-      footPrimary="반납 완료 + 정산서"
+      footDesc="정산서 PDF 자동 생성 예정"
+      footPrimary="반납 완료"
+      saving={saving}
+      onCancel={reset}
+      onSave={() =>
+        save({
+          payload: {
+            type: 'return',
+            title: `반납 ${contract}`.trim(),
+            contract_code: contract || undefined,
+            return_reason: reason[0],
+            date,
+            return_mileage: mileage ? Number(mileage.replace(/,/g, '')) : undefined,
+            return_fuel: fuel[0],
+            damage: damage || undefined,
+            extra_charges: extras,
+            deposit_refund: deposit || undefined,
+          },
+          validate: () => {
+            if (!contract) return '계약을 입력하세요';
+            if (!reason[0]) return '반납 사유를 선택하세요';
+            if (!mileage) return '반납 주행을 입력하세요';
+            return null;
+          },
+          successMsg: '반납 저장 완료',
+          onSuccess: reset,
+        })
+      }
       body={
         <>
           <FormRow label="계약" required>
             <div className="picker-row">
-              <input type="text" placeholder="계약 검색" />
-              <button type="button" className="pick-btn">
-                선택
-              </button>
+              <input
+                type="text"
+                placeholder="계약코드 또는 차량번호"
+                value={contract}
+                onChange={(e) => setContract(e.target.value)}
+              />
             </div>
           </FormRow>
           <FormRow label="반납 사유" required>
             <OptionGroup
               options={['정산반납 (만기)', '해지반납 (중도)', '강제회수 (잠수)', '기타회수']}
-              defaultSelected={['정산반납 (만기)']}
+              value={reason}
+              onChange={setReason}
             />
           </FormRow>
           <FormRow label="반납일자" required>
-            <input type="date" defaultValue="2026-04-25" />
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </FormRow>
           <FormRow label="반납 주행" required>
-            <input type="text" placeholder="km" />
+            <input
+              type="text"
+              placeholder="km"
+              value={mileage}
+              onChange={(e) => setMileage(e.target.value)}
+            />
           </FormRow>
           <FormRow label="연료 상태">
             <OptionGroup
               options={['가득', '3/4', '1/2', '1/4', '부족']}
-              defaultSelected={['1/2']}
+              value={fuel}
+              onChange={setFuel}
             />
           </FormRow>
           <FormRow label="손상 내역">
-            <textarea placeholder="외관 흠집·내부 오염·파손 부위 (사진 첨부)" />
+            <textarea
+              placeholder="외관 흠집·내부 오염·파손 부위 (사진 첨부)"
+              value={damage}
+              onChange={(e) => setDamage(e.target.value)}
+            />
           </FormRow>
           <FormRow label="추가 청구">
-            <OptionGroup options={['과주행료', '연료 부족', '손상 청구', '청소비']} multi />
+            <OptionGroup
+              options={['과주행료', '연료 부족', '손상 청구', '청소비']}
+              value={extras}
+              onChange={setExtras}
+              multi
+            />
             <div className="hint">선택 시 정산서에 자동 반영</div>
           </FormRow>
           <FormRow label="보증금">
-            <input type="text" defaultValue="1,000,000 → 920,000 환급" placeholder="환급액" />
+            <input
+              type="text"
+              placeholder="환급액"
+              value={deposit}
+              onChange={(e) => setDeposit(e.target.value)}
+            />
           </FormRow>
         </>
       }
@@ -564,6 +1005,19 @@ function BanabWizard() {
    7. 시동제어
    ════════════════════════════════════════════════ */
 function SidongWizard() {
+  const { saving, save } = useWizardSave();
+  const [target, setTarget] = useState('');
+  const [action, setAction] = useState<readonly string[]>(['시동 제어']);
+  const [reason, setReason] = useState<readonly string[]>(['미납 60일+']);
+  const [memo, setMemo] = useState('');
+
+  const reset = () => {
+    setTarget('');
+    setAction(['시동 제어']);
+    setReason(['미납 60일+']);
+    setMemo('');
+  };
+
   return (
     <WizardShell
       icon="ph-lock"
@@ -573,27 +1027,56 @@ function SidongWizard() {
       footDesc="⚠ GPS 장비로 즉시 실행됩니다"
       footPrimaryDanger
       footPrimary="실행"
+      saving={saving}
+      onCancel={reset}
+      onSave={() =>
+        save({
+          payload: {
+            type: action[0] === '제어 해제' ? 'ignition_unlock' : 'ignition_lock',
+            title: `${action[0]} · ${reason[0] ?? ''}`.trim(),
+            car_number: target ? sanitizeCarNumber(target) : undefined,
+            ignition_action: action[0],
+            ignition_reason: reason[0],
+            memo: memo || undefined,
+          },
+          validate: () => {
+            if (!target) return '대상을 입력하세요';
+            if (!action[0]) return '동작을 선택하세요';
+            if (!reason[0]) return '사유를 선택하세요';
+            return null;
+          },
+          successMsg: `${action[0]} 저장 완료`,
+          onSuccess: reset,
+        })
+      }
       body={
         <>
           <FormRow label="대상" required>
             <div className="picker-row">
-              <input type="text" placeholder="차량번호·계약자" />
-              <button type="button" className="pick-btn">
-                선택
-              </button>
+              <input
+                type="text"
+                placeholder="차량번호·계약자"
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+              />
             </div>
           </FormRow>
           <FormRow label="동작" required>
-            <OptionGroup options={['시동 제어', '제어 해제']} defaultSelected={['시동 제어']} />
+            <OptionGroup options={['시동 제어', '제어 해제']} value={action} onChange={setAction} />
           </FormRow>
           <FormRow label="사유" required>
             <OptionGroup
               options={['미납 60일+', '무단 운행', '납부 완료', '계약 해지']}
-              defaultSelected={['미납 60일+']}
+              value={reason}
+              onChange={setReason}
             />
           </FormRow>
           <FormRow label="메모">
-            <textarea placeholder="고객 통보 여부·기타 메모" />
+            <textarea
+              placeholder="고객 통보 여부·기타 메모"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+            />
           </FormRow>
         </>
       }
@@ -605,36 +1088,90 @@ function SidongWizard() {
    8. 기타이용
    ════════════════════════════════════════════════ */
 function IyongWizard() {
+  const { saving, save } = useWizardSave();
+  const [useType, setUseType] = useState<readonly string[]>(['시승']);
+  const [carNumber, setCarNumber] = useState('');
+  const [from, setFrom] = useState('차고지 A');
+  const [to, setTo] = useState('');
+  const [memo, setMemo] = useState('');
+
+  const reset = () => {
+    setUseType(['시승']);
+    setCarNumber('');
+    setFrom('차고지 A');
+    setTo('');
+    setMemo('');
+  };
+
   return (
     <WizardShell
       icon="ph-van"
       title="기타이용"
       desc="시승·세차·재배치·점검"
       footPrimary="저장"
+      saving={saving}
+      onCancel={reset}
+      onSave={() =>
+        save({
+          payload: {
+            type: 'general_use',
+            title: useType[0] ?? '기타이용',
+            car_number: carNumber ? sanitizeCarNumber(carNumber) : undefined,
+            use_type: useType[0],
+            from_location: from || undefined,
+            to_location: to || undefined,
+            memo: memo || undefined,
+          },
+          validate: () => {
+            if (!useType[0]) return '이용 종류를 선택하세요';
+            if (!carNumber) return '차량을 입력하세요';
+            return null;
+          },
+          successMsg: '기타이용 저장 완료',
+          onSuccess: reset,
+        })
+      }
       body={
         <>
           <FormRow label="이용 종류" required>
             <OptionGroup
               options={['시승', '세차', '주유', '차고지 재배치', '직원 출장', '기타']}
-              defaultSelected={['시승']}
+              value={useType}
+              onChange={setUseType}
             />
           </FormRow>
           <FormRow label="차량" required>
             <div className="picker-row">
-              <input type="text" placeholder="차량번호 검색" />
-              <button type="button" className="pick-btn">
-                선택
-              </button>
+              <input
+                type="text"
+                placeholder="차량번호"
+                value={carNumber}
+                onChange={(e) => setCarNumber(e.target.value)}
+              />
             </div>
           </FormRow>
           <FormRow label="출발 → 도착">
             <div className="picker-row">
-              <input type="text" placeholder="출발지" defaultValue="차고지 A" />
-              <input type="text" placeholder="도착지" />
+              <input
+                type="text"
+                placeholder="출발지"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+              />
+              <input
+                type="text"
+                placeholder="도착지"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+              />
             </div>
           </FormRow>
           <FormRow label="메모">
-            <textarea placeholder="이유·결과 메모" />
+            <textarea
+              placeholder="이유·결과 메모"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+            />
           </FormRow>
         </>
       }
@@ -646,30 +1183,69 @@ function IyongWizard() {
    9. 메모
    ════════════════════════════════════════════════ */
 function MemoWizard() {
+  const { saving, save } = useWizardSave();
+  const [target, setTarget] = useState('');
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+
+  const reset = () => {
+    setTarget('');
+    setTitle('');
+    setContent('');
+  };
+
   return (
     <WizardShell
       icon="ph-clipboard-text"
       title="메모"
       desc="자유 메모 + 첨부"
       footPrimary="저장"
+      saving={saving}
+      onCancel={reset}
+      onSave={() =>
+        save({
+          payload: {
+            type: 'memo',
+            title: title || '메모',
+            car_number: target ? sanitizeCarNumber(target) : undefined,
+            content,
+            memo: content,
+          },
+          validate: () => {
+            if (!title) return '제목을 입력하세요';
+            return null;
+          },
+          successMsg: '메모 저장 완료',
+          onSuccess: reset,
+        })
+      }
       body={
         <>
           <FormRow label="대상 (선택)">
             <div className="picker-row">
-              <input type="text" placeholder="차량·계약 (없어도 됨)" />
-              <button type="button" className="pick-btn">
-                선택
-              </button>
+              <input
+                type="text"
+                placeholder="차량·계약 (없어도 됨)"
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+              />
             </div>
           </FormRow>
           <FormRow label="제목" required>
-            <input type="text" placeholder="메모 제목" />
+            <input
+              type="text"
+              placeholder="메모 제목"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
           </FormRow>
           <FormRow label="내용">
-            <textarea placeholder="자유롭게" style={{ height: 120 }} />
-          </FormRow>
-          <FormRow label="첨부">
-            <OptionGroup options={['파일 선택', '사진 촬영']} multi />
+            <textarea
+              placeholder="자유롭게"
+              style={{ height: 120 }}
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+            />
           </FormRow>
         </>
       }
@@ -681,6 +1257,23 @@ function MemoWizard() {
    10. 요청등록
    ════════════════════════════════════════════════ */
 function YocheongWizard() {
+  const { saving, save } = useWizardSave();
+  const [recipient, setRecipient] = useState<readonly string[]>(['이대리 (회계)']);
+  const [reqTitle, setReqTitle] = useState('');
+  const [related, setRelated] = useState('');
+  const [due, setDue] = useState('');
+  const [priority, setPriority] = useState<readonly string[]>(['보통']);
+  const [detail, setDetail] = useState('');
+
+  const reset = () => {
+    setRecipient(['이대리 (회계)']);
+    setReqTitle('');
+    setRelated('');
+    setDue('');
+    setPriority(['보통']);
+    setDetail('');
+  };
+
   return (
     <WizardShell
       icon="ph-envelope"
@@ -688,37 +1281,72 @@ function YocheongWizard() {
       desc="직원에게 업무 지시 / 협조 요청"
       footDesc="받는 사람 일지에 자동 표시"
       footPrimary="요청 발송"
+      saving={saving}
+      onCancel={reset}
+      onSave={() =>
+        save({
+          payload: {
+            type: 'request',
+            title: reqTitle || '요청',
+            assignee: recipient[0],
+            car_number: related ? sanitizeCarNumber(related) : undefined,
+            due_date: due || undefined,
+            priority: priority[0],
+            memo: detail || undefined,
+          },
+          validate: () => {
+            if (!recipient[0]) return '받는 사람을 선택하세요';
+            if (!reqTitle) return '요청 내용을 입력하세요';
+            if (!due) return '마감일을 입력하세요';
+            return null;
+          },
+          successMsg: '요청 발송 완료',
+          onSuccess: reset,
+        })
+      }
       body={
         <>
           <FormRow label="받는 사람" required>
             <OptionGroup
               options={['박과장 (정비)', '이대리 (회계)', '최주임 (영업)', '정상무 (관리)']}
-              defaultSelected={['이대리 (회계)']}
+              value={recipient}
+              onChange={setRecipient}
             />
           </FormRow>
           <FormRow label="요청 내용" required>
             <input
               type="text"
               placeholder="간단한 요청 제목"
-              defaultValue="4월 미납 회원사별 정리"
+              value={reqTitle}
+              onChange={(e) => setReqTitle(e.target.value)}
             />
           </FormRow>
           <FormRow label="관련 대상">
             <div className="picker-row">
-              <input type="text" placeholder="차량·계약 (선택)" />
-              <button type="button" className="pick-btn">
-                선택
-              </button>
+              <input
+                type="text"
+                placeholder="차량·계약 (선택)"
+                value={related}
+                onChange={(e) => setRelated(e.target.value)}
+              />
             </div>
           </FormRow>
           <FormRow label="마감" required>
-            <input type="date" defaultValue="2026-04-28" />
+            <input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
           </FormRow>
           <FormRow label="우선순위">
-            <OptionGroup options={['낮음', '보통', '높음', '긴급']} defaultSelected={['보통']} />
+            <OptionGroup
+              options={['낮음', '보통', '높음', '긴급']}
+              value={priority}
+              onChange={setPriority}
+            />
           </FormRow>
           <FormRow label="상세">
-            <textarea placeholder="상세 내용·기준·참고사항" />
+            <textarea
+              placeholder="상세 내용·기준·참고사항"
+              value={detail}
+              onChange={(e) => setDetail(e.target.value)}
+            />
           </FormRow>
         </>
       }
@@ -727,7 +1355,7 @@ function YocheongWizard() {
 }
 
 /* ════════════════════════════════════════════════
-   11. 받은요청 — list
+   11. 받은요청 — list (mock 유지)
    ════════════════════════════════════════════════ */
 interface ReqRow {
   date: string;
@@ -870,7 +1498,7 @@ function ReceivedList() {
 }
 
 /* ════════════════════════════════════════════════
-   12. 시킨요청 — list
+   12. 시킨요청 — list (mock 유지)
    ════════════════════════════════════════════════ */
 const SENT_ROWS: ReqRow[] = [
   {

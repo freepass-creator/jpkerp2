@@ -1,11 +1,20 @@
 'use client';
 
+import { EditDialog } from '@/components/shared/edit-dialog';
 import type { JpkGridApi } from '@/components/shared/jpk-grid';
+import { useAuth } from '@/lib/auth/context';
 import { useRtdbCollection } from '@/lib/collections/rtdb';
+import { parseCsv } from '@/lib/csv';
 import { today as todayStr } from '@/lib/date-utils';
+import { saveEvent, upsertEventByRawKey } from '@/lib/firebase/events';
+import { sanitizeCarNumber } from '@/lib/format-input';
+import * as bankShinhan from '@/lib/parsers/bank-shinhan';
+import * as cardShinhan from '@/lib/parsers/card-shinhan';
 import type { RtdbBilling, RtdbEvent } from '@/lib/types/rtdb-entities';
 import { fmt } from '@/lib/utils';
+import Link from 'next/link';
 import { useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { LedgerClient } from './ledger-client';
 
 type SubpageId = 'finance-list' | 'finance-daily' | 'finance-tax-invoice';
@@ -38,6 +47,8 @@ export default function FinancePage() {
   const gridRef = useRef<JpkGridApi<RtdbEvent> | null>(null);
   const [active, setActive] = useState<SubpageId>('finance-list');
   const [count, setCount] = useState(0);
+  const [csvOpen, setCsvOpen] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
 
   const events = useRtdbCollection<RtdbEvent>('events');
   const billings = useRtdbCollection<RtdbBilling>('billings');
@@ -50,6 +61,12 @@ export default function FinancePage() {
   const dailyRows = useMemo(() => deriveDailyRows(events.data), [events.data]);
 
   const activeTab = TABS.find((t) => t.id === active) ?? TABS[0];
+
+  const onPrimary = () => {
+    if (active === 'finance-list') setCsvOpen(true);
+    else if (active === 'finance-daily') toast.info('자금일보 작성은 다음 단계에서 구현 예정');
+    else toast.info('세금계산서 발행은 다음 단계에서 구현 예정');
+  };
 
   return (
     <>
@@ -73,16 +90,19 @@ export default function FinancePage() {
           ))}
         </div>
         <div className="action">
-          <button type="button" disabled>
+          <button type="button" onClick={onPrimary}>
             {activeTab.primaryAction}
           </button>
           {activeTab.secondaryAction && (
-            <button type="button" className="is-secondary" disabled>
+            <button type="button" className="is-secondary" onClick={() => setManualOpen(true)}>
               {activeTab.secondaryAction}
             </button>
           )}
         </div>
       </div>
+
+      <CsvUploadDialog open={csvOpen} onClose={() => setCsvOpen(false)} />
+      <ManualTxDialog open={manualOpen} onClose={() => setManualOpen(false)} />
 
       {active === 'finance-list' ? (
         <FinanceListSubpage
@@ -540,5 +560,406 @@ function cellTd(): React.CSSProperties {
     padding: '6px 8px',
     textAlign: 'center',
     color: 'var(--c-text)',
+  };
+}
+
+/* ═════════ CSV 업로드 모달 ═════════ */
+
+type ParsedRow = bankShinhan.BankTxEvent | cardShinhan.CardTxEvent;
+
+function CsvUploadDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [rows, setRows] = useState<ParsedRow[]>([]);
+  const [parserName, setParserName] = useState<string>('');
+  const [busy, setBusy] = useState(false);
+
+  const reset = () => {
+    setFile(null);
+    setRows([]);
+    setParserName('');
+  };
+
+  const parseFile = async (f: File) => {
+    setFile(f);
+    try {
+      const text = await f.text();
+      const arr = parseCsv(text);
+      if (arr.length < 2) {
+        toast.error('CSV가 비어있거나 헤더만 있습니다');
+        return;
+      }
+      const headers = arr[0].map((h) => String(h ?? '').trim());
+      const dataRows = arr.slice(1);
+
+      let parsed: ParsedRow[] = [];
+      let pName = '';
+
+      if (bankShinhan.detect(headers)) {
+        pName = bankShinhan.LABEL;
+        parsed = dataRows
+          .map((r) => bankShinhan.parseRow(r, headers))
+          .filter((x): x is bankShinhan.BankTxEvent => !!x);
+      } else if (cardShinhan.detect(headers)) {
+        pName = cardShinhan.LABEL;
+        parsed = dataRows
+          .map((r) => cardShinhan.parseRow(r, headers))
+          .filter((x): x is cardShinhan.CardTxEvent => !!x);
+      } else {
+        toast.error('지원하는 CSV 형식이 아닙니다 (신한은행·신한카드만 지원)');
+        return;
+      }
+
+      setRows(parsed);
+      setParserName(pName);
+      toast.success(`${pName} CSV ${parsed.length}행 파싱 완료`);
+    } catch (err) {
+      toast.error(`CSV 파싱 실패: ${(err as Error).message}`);
+    }
+  };
+
+  const onSave = async () => {
+    if (rows.length === 0) {
+      toast.error('파싱된 데이터가 없습니다');
+      return;
+    }
+    setBusy(true);
+    try {
+      let ok = 0;
+      const matched = 0;
+      for (const r of rows) {
+        try {
+          await upsertEventByRawKey({
+            ...r,
+            type: r.type,
+            raw_key: r.raw_key,
+            title: r.counterparty,
+            // 통장 거래의 출금은 음수, 입금은 양수 — bank_tx 파서는 direction='out'이면 amount만 들어옴
+            // amount는 부호 없음. 매칭은 파서 result에 amount를 그대로 넘김.
+            amount:
+              (r as { direction?: string }).direction === 'out' ? -Math.abs(r.amount) : r.amount,
+          });
+          ok++;
+          // upsert 후 reconcile은 events.ts 내부에서 contract_code 있을 때만 실행됨
+          // 신규 CSV는 contract_code 없는 상태라 매칭은 별도 단계 필요
+        } catch (e) {
+          /* per-row 오류는 무시 */
+        }
+      }
+      toast.success(`${ok}건 저장 완료 (자동매칭은 거래처별 매뉴얼 매칭 단계에서 처리)`);
+      reset();
+      onClose();
+    } catch (e) {
+      toast.error(`저장 실패: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <EditDialog
+      open={open}
+      title="CSV 업로드"
+      subtitle={parserName ? `감지: ${parserName}` : '신한은행·신한카드 CSV 자동 감지'}
+      onClose={() => {
+        reset();
+        onClose();
+      }}
+      onSave={onSave}
+      saving={busy}
+      width={640}
+      extraActions={
+        <Link href="/upload" className="btn btn-sm btn-outline" style={{ textDecoration: 'none' }}>
+          <i className="ph ph-arrow-square-out" />
+          상세 업로드 페이지
+        </Link>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <label
+          style={{
+            border: '1px dashed var(--c-border)',
+            padding: 16,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            cursor: 'pointer',
+            background: 'var(--c-bg-sub)',
+          }}
+        >
+          <input
+            type="file"
+            accept=".csv,.tsv,.txt"
+            hidden
+            onChange={(e) => {
+              if (e.target.files?.[0]) parseFile(e.target.files[0]);
+              e.target.value = '';
+            }}
+          />
+          <i className="ph ph-file-csv" style={{ fontSize: 24 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 600 }}>{file?.name ?? 'CSV 파일 선택'}</div>
+            <div style={{ color: 'var(--c-text-muted)', fontSize: 12 }}>
+              신한은행 거래내역 / 신한카드 이용내역 자동 감지
+            </div>
+          </div>
+        </label>
+
+        {rows.length > 0 && (
+          <div
+            style={{
+              border: '1px solid var(--c-border)',
+              maxHeight: 280,
+              overflowY: 'auto',
+            }}
+          >
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: 'var(--c-bg-soft)' }}>
+                  <th style={cellTh(96)}>일자</th>
+                  <th style={{ ...cellTh(), textAlign: 'left' }}>거래처</th>
+                  <th style={{ ...cellTh(96), textAlign: 'right' }}>금액</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.slice(0, 50).map((r) => (
+                  <tr key={r.raw_key} style={{ borderTop: '1px solid var(--c-border)' }}>
+                    <td style={cellTd()}>{r.date}</td>
+                    <td style={{ ...cellTd(), textAlign: 'left' }}>{r.counterparty ?? '—'}</td>
+                    <td
+                      style={{
+                        ...cellTd(),
+                        textAlign: 'right',
+                        color:
+                          (r as { direction?: string }).direction === 'out'
+                            ? 'var(--c-err)'
+                            : 'var(--c-emerald)',
+                      }}
+                    >
+                      {(r as { direction?: string }).direction === 'out' ? '-' : '+'}
+                      {fmt(Math.abs(r.amount))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {rows.length > 50 && (
+              <div
+                style={{
+                  padding: 6,
+                  textAlign: 'center',
+                  color: 'var(--c-text-muted)',
+                  fontSize: 11,
+                }}
+              >
+                ... 외 {rows.length - 50}건
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </EditDialog>
+  );
+}
+
+/* ═════════ 수기 거래 입력 모달 ═════════ */
+
+function ManualTxDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { user } = useAuth();
+  const [type, setType] = useState<'bank_tx' | 'card_tx'>('bank_tx');
+  const [direction, setDirection] = useState<'in' | 'out'>('in');
+  const [date, setDate] = useState(todayStr());
+  const [amount, setAmount] = useState('');
+  const [counterparty, setCounterparty] = useState('');
+  const [contractCode, setContractCode] = useState('');
+  const [carNumber, setCarNumber] = useState('');
+  const [memo, setMemo] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const reset = () => {
+    setType('bank_tx');
+    setDirection('in');
+    setDate(todayStr());
+    setAmount('');
+    setCounterparty('');
+    setContractCode('');
+    setCarNumber('');
+    setMemo('');
+  };
+
+  const onSave = async () => {
+    if (!date) {
+      toast.error('일자를 입력하세요');
+      return;
+    }
+    if (!amount) {
+      toast.error('금액을 입력하세요');
+      return;
+    }
+    const amt = Number(amount.replace(/[,\s]/g, ''));
+    if (!amt || Number.isNaN(amt)) {
+      toast.error('금액 형식이 올바르지 않습니다');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const signed = direction === 'out' ? -Math.abs(amt) : Math.abs(amt);
+      await saveEvent({
+        type,
+        source: 'manual',
+        direction,
+        date,
+        amount: signed,
+        title: counterparty || '수기 입력',
+        counterparty,
+        contract_code: contractCode || undefined,
+        car_number: carNumber ? sanitizeCarNumber(carNumber) : undefined,
+        memo: memo || undefined,
+        handler_uid: user?.uid,
+        handler: user?.displayName ?? user?.email ?? undefined,
+      });
+      toast.success(
+        contractCode ? '수기 거래 저장 완료 · 청구 자동매칭 시도됨' : '수기 거래 저장 완료',
+      );
+      reset();
+      onClose();
+    } catch (e) {
+      toast.error(`저장 실패: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <EditDialog
+      open={open}
+      title="수기 거래 입력"
+      subtitle="자금일보 자동매칭이 안 되는 거래를 직접 입력"
+      onClose={() => {
+        reset();
+        onClose();
+      }}
+      onSave={onSave}
+      saving={busy}
+      width={520}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <label style={{ flex: 1 }}>
+            <div style={lblStyle()}>거래 유형</div>
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value as 'bank_tx' | 'card_tx')}
+              style={inputStyle()}
+            >
+              <option value="bank_tx">통장</option>
+              <option value="card_tx">카드</option>
+            </select>
+          </label>
+          <label style={{ flex: 1 }}>
+            <div style={lblStyle()}>입출금</div>
+            <select
+              value={direction}
+              onChange={(e) => setDirection(e.target.value as 'in' | 'out')}
+              style={inputStyle()}
+            >
+              <option value="in">입금 (+)</option>
+              <option value="out">출금 (-)</option>
+            </select>
+          </label>
+          <label style={{ flex: 1 }}>
+            <div style={lblStyle()}>일자 *</div>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              style={inputStyle()}
+            />
+          </label>
+        </div>
+
+        <label>
+          <div style={lblStyle()}>금액 *</div>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0"
+            style={{ ...inputStyle(), textAlign: 'right' }}
+          />
+        </label>
+
+        <label>
+          <div style={lblStyle()}>거래처</div>
+          <input
+            type="text"
+            value={counterparty}
+            onChange={(e) => setCounterparty(e.target.value)}
+            placeholder="홍길동 / ○○주유소"
+            style={inputStyle()}
+          />
+        </label>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <label style={{ flex: 1 }}>
+            <div style={lblStyle()}>계약코드 (자동매칭)</div>
+            <input
+              type="text"
+              value={contractCode}
+              onChange={(e) => setContractCode(e.target.value)}
+              placeholder="CT00012"
+              style={inputStyle()}
+            />
+          </label>
+          <label style={{ flex: 1 }}>
+            <div style={lblStyle()}>차량번호</div>
+            <input
+              type="text"
+              value={carNumber}
+              onChange={(e) => setCarNumber(e.target.value)}
+              placeholder="12가3456"
+              style={inputStyle()}
+            />
+          </label>
+        </div>
+
+        <label>
+          <div style={lblStyle()}>메모</div>
+          <textarea
+            value={memo}
+            onChange={(e) => setMemo(e.target.value)}
+            rows={2}
+            style={inputStyle()}
+          />
+        </label>
+
+        <div style={{ color: 'var(--c-text-muted)', fontSize: 11 }}>
+          계약코드가 있으면 해당 계약의 미납 청구에 자동 적용됩니다.
+        </div>
+      </div>
+    </EditDialog>
+  );
+}
+
+function lblStyle(): React.CSSProperties {
+  return {
+    fontSize: 11,
+    color: 'var(--c-text-sub)',
+    marginBottom: 2,
+    fontWeight: 600,
+  };
+}
+
+function inputStyle(): React.CSSProperties {
+  return {
+    width: '100%',
+    padding: '6px 8px',
+    border: '1px solid var(--c-border)',
+    background: 'var(--c-surface)',
+    color: 'var(--c-text)',
+    fontFamily: 'inherit',
+    fontSize: 13,
+    borderRadius: 2,
   };
 }
