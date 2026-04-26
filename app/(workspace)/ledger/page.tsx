@@ -28,9 +28,23 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { AutoDebitClient } from '../autodebit/autodebit-client';
+import {
+  BillingScheduleClient,
+  type ScheduleRow,
+} from '../billing-schedule/billing-schedule-client';
+import { type BillRow, BillingClient } from '../billing/billing-client';
+import { FinanceClient, type MonthlyRow } from '../finance/finance-client';
 import { LedgerClient } from './ledger-client';
 
-type SubpageId = 'finance-list' | 'finance-daily' | 'finance-tax-invoice';
+type SubpageId =
+  | 'finance-list'
+  | 'finance-daily'
+  | 'finance-tax-invoice'
+  | 'finance-autodebit'
+  | 'finance-billing'
+  | 'finance-billing-schedule'
+  | 'finance-report';
 
 interface TabSpec {
   id: SubpageId;
@@ -48,12 +62,20 @@ const TABS: TabSpec[] = [
   },
   { id: 'finance-daily', label: '자금일보', primaryAction: '+ 자금일보 작성' },
   { id: 'finance-tax-invoice', label: '세금계산서', primaryAction: '+ 계산서 발행' },
+  { id: 'finance-autodebit', label: '자동이체', primaryAction: '+ 자동이체 신규' },
+  { id: 'finance-billing', label: '수납 관리', primaryAction: '+ 수납 추가' },
+  { id: 'finance-billing-schedule', label: '수납 스케줄', primaryAction: '+ 스케줄 생성' },
+  { id: 'finance-report', label: '재무 보고', primaryAction: '' },
 ];
 
 const TAB_CRUMB: Record<SubpageId, string> = {
   'finance-list': '입출금내역',
   'finance-daily': '자금일보',
   'finance-tax-invoice': '세금계산서',
+  'finance-autodebit': '자동이체',
+  'finance-billing': '수납 관리',
+  'finance-billing-schedule': '수납 스케줄',
+  'finance-report': '재무 보고',
 };
 
 /** URL `?tab=` 약자 → 내부 SubpageId */
@@ -63,6 +85,13 @@ const TAB_ALIAS: Record<string, SubpageId> = {
   daily: 'finance-daily',
   'tax-invoice': 'finance-tax-invoice',
   tax: 'finance-tax-invoice',
+  autodebit: 'finance-autodebit',
+  cms: 'finance-autodebit',
+  billing: 'finance-billing',
+  'billing-schedule': 'finance-billing-schedule',
+  schedule: 'finance-billing-schedule',
+  report: 'finance-report',
+  finance: 'finance-report',
 };
 
 export default function FinancePage() {
@@ -99,7 +128,13 @@ export default function FinancePage() {
   const onPrimary = () => {
     if (active === 'finance-list') setCsvOpen(true);
     else if (active === 'finance-daily') setDailyOpen(true);
-    else toast.info('세금계산서는 아래 카드에서 발행하세요');
+    else if (active === 'finance-tax-invoice') toast.info('세금계산서는 아래 카드에서 발행하세요');
+    else if (active === 'finance-autodebit')
+      toast.info('자동이체 신규 등록은 계약 상세 화면에서 처리하세요');
+    else if (active === 'finance-billing')
+      toast.info('수납 추가는 자금일보 자동매칭 또는 수기 거래로 입력하세요');
+    else if (active === 'finance-billing-schedule')
+      toast.info('수납 스케줄은 계약 등록 시 자동 생성됩니다');
   };
 
   return (
@@ -124,9 +159,11 @@ export default function FinancePage() {
           ))}
         </div>
         <div className="action">
-          <button type="button" onClick={onPrimary}>
-            {activeTab.primaryAction}
-          </button>
+          {activeTab.primaryAction && (
+            <button type="button" onClick={onPrimary}>
+              {activeTab.primaryAction}
+            </button>
+          )}
           {activeTab.secondaryAction && (
             <button type="button" className="is-secondary" onClick={() => setManualOpen(true)}>
               {activeTab.secondaryAction}
@@ -161,10 +198,108 @@ export default function FinancePage() {
           events={events.data}
           onWriteClick={() => setDailyOpen(true)}
         />
-      ) : (
+      ) : active === 'finance-tax-invoice' ? (
         <TaxInvoiceSubpage events={events.data} billings={billings.data} />
+      ) : active === 'finance-autodebit' ? (
+        <AutoDebitSubpage />
+      ) : active === 'finance-billing' ? (
+        <BillingSubpage />
+      ) : active === 'finance-billing-schedule' ? (
+        <BillingScheduleSubpage />
+      ) : (
+        <ReportSubpage />
       )}
     </>
+  );
+}
+
+/* ── 자동이체 sub-page (CMS 자동이체 등록 현황) ── */
+function AutoDebitSubpage() {
+  return (
+    <div className="v3-subpage is-active">
+      <div className="v3-alerts">
+        <PanelHeader icon="ph-arrows-clockwise" title="자동이체" count="· CMS 자동이체 등록 현황" />
+      </div>
+      <div className="v3-table-wrap">
+        <div className="v3-grid-host">
+          <AutoDebitClient />
+        </div>
+      </div>
+      <TableFoot>
+        <span className="v3-stat-mut">계약별 자동이체 등록·중지·해지 상태</span>
+      </TableFoot>
+    </div>
+  );
+}
+
+/* ── 수납 관리 sub-page (회차별 청구·입금·연체) ── */
+function BillingSubpage() {
+  const billingGridRef = useRef<JpkGridApi<BillRow> | null>(null);
+  const [billingCount, setBillingCount] = useState(0);
+  return (
+    <div className="v3-subpage is-active">
+      <div className="v3-alerts">
+        <PanelHeader icon="ph-currency-krw" title="수납 관리" count={`· ${billingCount}건 청구`} />
+      </div>
+      <div className="v3-table-wrap">
+        <div className="v3-grid-host">
+          <BillingClient gridRef={billingGridRef} onCountChange={setBillingCount} />
+        </div>
+      </div>
+      <TableFoot trailing="회차별 청구·입금·연체 — read-only (입력은 자금일보 자동매칭)">
+        총 {billingCount}건
+      </TableFoot>
+    </div>
+  );
+}
+
+/* ── 수납 스케줄 sub-page (계약별 납부 현황) ── */
+function BillingScheduleSubpage() {
+  const scheduleGridRef = useRef<JpkGridApi<ScheduleRow> | null>(null);
+  const [scheduleCount, setScheduleCount] = useState(0);
+  return (
+    <div className="v3-subpage is-active">
+      <div className="v3-alerts">
+        <PanelHeader
+          icon="ph-calendar-check"
+          title="수납 스케줄"
+          count={`· ${scheduleCount}개 계약`}
+        />
+      </div>
+      <div className="v3-table-wrap">
+        <div className="v3-grid-host">
+          <BillingScheduleClient gridRef={scheduleGridRef} onCountChange={setScheduleCount} />
+        </div>
+      </div>
+      <TableFoot trailing="계약별 보증금·월대여료·납부·미납·대기 회차">
+        총 {scheduleCount}개 계약
+      </TableFoot>
+    </div>
+  );
+}
+
+/* ── 재무 보고 sub-page (월별 매출·지출·순익) ── */
+function ReportSubpage() {
+  const reportGridRef = useRef<JpkGridApi<MonthlyRow> | null>(null);
+  const [reportCount, setReportCount] = useState(0);
+  return (
+    <div className="v3-subpage is-active">
+      <div className="v3-alerts">
+        <PanelHeader
+          icon="ph-chart-bar"
+          title="재무 보고"
+          count={`· 최근 ${reportCount}개월 집계`}
+        />
+      </div>
+      <div className="v3-table-wrap">
+        <div className="v3-grid-host">
+          <FinanceClient gridRef={reportGridRef} onCountChange={setReportCount} />
+        </div>
+      </div>
+      <TableFoot trailing="billings.paid_total = 매출, events 정비·사고·과태료 등 = 지출">
+        {reportCount}개월
+      </TableFoot>
+    </div>
   );
 }
 

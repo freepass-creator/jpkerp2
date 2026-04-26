@@ -28,6 +28,9 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { ReturnScheduleClient } from '../return-schedule/return-schedule-client';
+import { ExpiringClient, type ExpiringRow } from '../status/expiring/expiring-client';
+import { type IgRow, IgnitionClient } from '../status/ignition/ignition-client';
 import { ContractClient, type ContractRow } from './contract-client';
 
 type SubpageId =
@@ -38,7 +41,10 @@ type SubpageId =
   | 'contract-accident'
   | 'contract-consultation'
   | 'contract-fine'
-  | 'contract-terminated';
+  | 'contract-terminated'
+  | 'contract-ignition'
+  | 'contract-expiring'
+  | 'contract-return-schedule';
 
 interface TabSpec {
   id: SubpageId;
@@ -51,7 +57,10 @@ const TABS: TabSpec[] = [
   { id: 'contract-list', label: '계약목록', action: '+ 계약 신규', href: '/input?type=contract' },
   { id: 'contract-idle', label: '휴차풀', action: '+ 휴차 처리' },
   { id: 'contract-overdue', label: '미납관리', action: '+ 독촉 기록' },
+  { id: 'contract-ignition', label: '시동제어', action: '+ 제어 등록' },
   { id: 'contract-release-return', label: '출고·반납', action: '+ 출고/반납 등록' },
+  { id: 'contract-return-schedule', label: '반납일정', action: '+ 반납 처리' },
+  { id: 'contract-expiring', label: '만기도래', action: '' },
   { id: 'contract-accident', label: '사고관리', action: '+ 사고 접수' },
   { id: 'contract-consultation', label: '고객응대', action: '+ 응대 기록' },
   { id: 'contract-fine', label: '과태료', action: '+ 과태료 일괄' },
@@ -62,7 +71,10 @@ const TAB_CRUMB: Record<SubpageId, string> = {
   'contract-list': '계약목록',
   'contract-idle': '휴차풀',
   'contract-overdue': '미납관리',
+  'contract-ignition': '시동제어',
   'contract-release-return': '출고·반납',
+  'contract-return-schedule': '반납일정',
+  'contract-expiring': '만기도래',
   'contract-accident': '사고관리',
   'contract-consultation': '고객응대',
   'contract-fine': '과태료',
@@ -74,9 +86,15 @@ const TAB_ALIAS: Record<string, SubpageId> = {
   list: 'contract-list',
   idle: 'contract-idle',
   overdue: 'contract-overdue',
+  ignition: 'contract-ignition',
+  lock: 'contract-ignition',
+  'engine-lock': 'contract-ignition',
   'release-return': 'contract-release-return',
   release: 'contract-release-return',
   return: 'contract-release-return',
+  'return-schedule': 'contract-return-schedule',
+  expiring: 'contract-expiring',
+  expire: 'contract-expiring',
   accident: 'contract-accident',
   consultation: 'contract-consultation',
   fine: 'contract-fine',
@@ -133,8 +151,15 @@ export default function ContractPage() {
       case 'contract-overdue':
         router.push('/operation?tab=eungdae&topic=미납독촉&filter=overdue');
         break;
+      case 'contract-ignition':
+        // 시동제어 등록은 미납 → 독촉 → 제어 흐름으로 작업 (현재는 toast 안내)
+        toast.info('시동제어 등록은 미납관리 탭의 행에서 처리하세요');
+        break;
       case 'contract-release-return':
         router.push('/operation?tab=chulgo');
+        break;
+      case 'contract-return-schedule':
+        router.push('/operation?tab=banab');
         break;
       case 'contract-accident':
         router.push('/operation?tab=sago');
@@ -199,6 +224,12 @@ export default function ContractPage() {
         <IdleSubpage loading={assets.loading} rows={assets.data} alerts={idleAlerts} />
       ) : active === 'contract-overdue' ? (
         <OverdueSubpage loading={billings.loading} alerts={overdueAlerts} filter={filterParam} />
+      ) : active === 'contract-ignition' ? (
+        <IgnitionSubpage />
+      ) : active === 'contract-expiring' ? (
+        <ExpiringSubpage />
+      ) : active === 'contract-return-schedule' ? (
+        <ReturnScheduleSubpage />
       ) : active === 'contract-fine' ? (
         <div className="v3-subpage is-active">
           <PenaltyBatchTool />
@@ -207,6 +238,86 @@ export default function ContractPage() {
         <PlaceholderSubpage label={activeTab.label} />
       )}
     </>
+  );
+}
+
+/* ── 시동제어 sub-page (action_status='시동제어' 계약) ── */
+function IgnitionSubpage() {
+  const igGridRef = useRef<JpkGridApi<IgRow> | null>(null);
+  const [igCount, setIgCount] = useState(0);
+  const igAlerts = useMemo<AlertItem[]>(() => {
+    if (igCount === 0) return [];
+    return [
+      {
+        key: 'ignition-active',
+        severity: 'warn',
+        icon: 'ph-lock',
+        head: `시동제어 중 ${igCount}건`,
+        desc: '미납 누적으로 제어된 차량 — 입금 확인 후 해제 처리',
+        actionLabel: '확인',
+        count: igCount,
+      },
+    ];
+  }, [igCount]);
+  return (
+    <div className="v3-subpage is-active">
+      <AlertsPanel
+        alerts={igAlerts}
+        clearTitle="시동제어 차량 없음"
+        pendingTitle="시동제어"
+        pendingCountLabel={`· ${igCount}건 제어 중`}
+      />
+      <div className="v3-table-wrap">
+        <div className="v3-grid-host">
+          <IgnitionClient gridRef={igGridRef} onCountChange={setIgCount} />
+        </div>
+      </div>
+      <TableFoot trailing="차량·계약자·미납회수·연체일 — 입금 확인 후 제어해제">
+        총 {igCount}건
+      </TableFoot>
+    </div>
+  );
+}
+
+/* ── 만기도래 sub-page (3개월 이내 만기 계약) ── */
+function ExpiringSubpage() {
+  const exGridRef = useRef<JpkGridApi<ExpiringRow> | null>(null);
+  const [exCount, setExCount] = useState(0);
+  return (
+    <div className="v3-subpage is-active">
+      <div className="v3-alerts">
+        <PanelHeader
+          icon="ph-calendar-x"
+          title="만기 도래"
+          count={`· ${exCount}건 (D-day 임박순)`}
+        />
+      </div>
+      <div className="v3-table-wrap">
+        <div className="v3-grid-host">
+          <ExpiringClient gridRef={exGridRef} onCountChange={setExCount} />
+        </div>
+      </div>
+      <TableFoot trailing="기간 필터로 1·2·3·6개월 범위 조정 가능">총 {exCount}건</TableFoot>
+    </div>
+  );
+}
+
+/* ── 반납일정 sub-page (3개월 이내 반납 예정 계약) ── */
+function ReturnScheduleSubpage() {
+  return (
+    <div className="v3-subpage is-active">
+      <div className="v3-alerts">
+        <PanelHeader icon="ph-arrow-u-down-left" title="반납 일정" count="· 3개월 이내 만기 계약" />
+      </div>
+      <div className="v3-table-wrap">
+        <div className="v3-grid-host">
+          <ReturnScheduleClient />
+        </div>
+      </div>
+      <TableFoot trailing="만기일 기준 D-day 정렬 — 반납 처리는 출고·반납 탭에서">
+        활성 계약 만기 도래
+      </TableFoot>
+    </div>
   );
 }
 
