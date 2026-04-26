@@ -2,7 +2,17 @@
 
 import type { JpkGridApi } from '@/components/shared/jpk-grid';
 import { AssetDetailPanel } from '@/components/v3/AssetDetailPanel';
+import {
+  AlertsPanel,
+  ErrorBox,
+  LoadingBox,
+  PlaceholderBlock,
+  StatDot,
+  StatSep,
+  TableFoot,
+} from '@/components/v3/panels';
 import { useRtdbCollection } from '@/lib/collections/rtdb';
+import type { AlertItem } from '@/lib/types/v3-ui';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -129,23 +139,7 @@ export default function AssetPage() {
         </div>
         <div className="action">
           {inputType ? (
-            <Link
-              href={`/input?type=${inputType}`}
-              className=""
-              style={{
-                textDecoration: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                height: 24,
-                padding: '0 8px',
-                background: 'var(--c-accent)',
-                color: 'var(--c-text-inv)',
-                border: '1px solid var(--c-accent)',
-              }}
-            >
-              {activeTab.action}
-            </Link>
+            <Link href={`/input?type=${inputType}`}>{activeTab.action}</Link>
           ) : (
             <button type="button" disabled>
               {activeTab.action}
@@ -200,52 +194,22 @@ function AssetListSubpage({
   gridRef: React.RefObject<JpkGridApi<AssetRow> | null>;
   onRowClick: (row: AssetRow) => void;
 }) {
-  const isClear = alerts.length === 0;
   const totalAlerts = alerts.reduce((sum, a) => sum + a.count, 0);
 
   return (
     <div className="v3-subpage is-active">
-      {/* 미결 패널 */}
-      <div className={`v3-alerts ${isClear ? 'is-clear' : ''}`}>
-        <div className="v3-alerts-head">
-          <span className="dot" />
-          <span className="title">{isClear ? '자산 데이터 정상' : '자산 데이터 미결'}</span>
-          <span className="count">{isClear ? '· 0건' : `· ${totalAlerts}건 (입력 미완성)`}</span>
-        </div>
-        {!isClear && (
-          <div className="v3-alerts-grid">
-            {alerts.map((a) => (
-              <div
-                key={a.key}
-                className={`v3-alert-card ${a.severity === 'danger' ? 'is-danger' : a.severity === 'info' ? 'is-info' : ''}`}
-              >
-                <i className={`ph ${a.icon} ico`} />
-                <div className="body">
-                  <div className="head">{a.head}</div>
-                  <div className="desc">{a.desc}</div>
-                </div>
-                <button type="button" className="alert-btn">
-                  {a.actionLabel}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <AlertsPanel
+        alerts={alerts}
+        clearTitle="자산 데이터 정상"
+        pendingTitle="자산 데이터 미결"
+        pendingCountLabel={`· ${totalAlerts}건 (입력 미완성)`}
+      />
 
-      {/* AG Grid wrapped in v3 table panel */}
       <div className="v3-table-wrap">
         {loading ? (
-          <div style={{ padding: 24, color: 'var(--c-text-muted)', textAlign: 'center' }}>
-            <i className="ph ph-spinner spin" /> 차량 데이터 로드 중...
-          </div>
+          <LoadingBox label="차량 데이터 로드 중..." />
         ) : error ? (
-          <div style={{ padding: 24 }}>
-            <div style={{ fontWeight: 600, color: 'var(--c-err)', marginBottom: 4 }}>
-              데이터 로드 실패
-            </div>
-            <div style={{ color: 'var(--c-text-sub)' }}>{error.message}</div>
-          </div>
+          <ErrorBox error={error} />
         ) : (
           <div className="v3-grid-host">
             <AssetsGrid
@@ -256,24 +220,21 @@ function AssetListSubpage({
         )}
       </div>
 
-      {/* table-foot: 총 N대 + 상태별 카운트 */}
-      <div className="v3-table-foot">
-        <div>
-          총 {stats.total}대<span className="sep">│</span>
-          <span className="stat-dot active" />
-          대여중 {stats.active}
-          <span className="sep">│</span>
-          <span className="stat-dot idle" />
-          휴차 {stats.idle}
-          <span className="sep">│</span>
-          <span className="stat-dot repair" />
-          수선중 {stats.repair}
-          <span className="sep">│</span>
-          <span className="stat-dot sale" />
-          매각예정 {stats.sale}
-        </div>
-        <div style={{ color: 'var(--c-text-muted)' }}>행 클릭 시 차량 프로필</div>
-      </div>
+      <TableFoot trailing="행 클릭 시 차량 프로필">
+        총 {stats.total}대
+        <StatSep />
+        <StatDot variant="active" />
+        대여중 {stats.active}
+        <StatSep />
+        <StatDot variant="idle" />
+        휴차 {stats.idle}
+        <StatSep />
+        <StatDot variant="repair" />
+        수선중 {stats.repair}
+        <StatSep />
+        <StatDot variant="sale" />
+        매각예정 {stats.sale}
+      </TableFoot>
     </div>
   );
 }
@@ -282,30 +243,20 @@ function AssetListSubpage({
 function PlaceholderSubpage({ label, filter }: { label: string; filter?: string }) {
   return (
     <div className="v3-subpage is-active">
-      <div className="v3-placeholder">
-        <i className="ph ph-hourglass-medium" />
-        <div className="title">{label} 준비 중</div>
-        <div className="desc">
-          차량 단위로 통합된 {label} 관리 화면을 구현 중입니다.
-          {filter ? ` (적용 필터: ${filter})` : ''}
-        </div>
-      </div>
+      <PlaceholderBlock
+        title={`${label} 준비 중`}
+        desc={
+          <>
+            차량 단위로 통합된 {label} 관리 화면을 구현 중입니다.
+            {filter ? ` (적용 필터: ${filter})` : ''}
+          </>
+        }
+      />
     </div>
   );
 }
 
 /* ═════════ 미결 derive 로직 ═════════ */
-
-type AlertSeverity = 'danger' | 'warn' | 'info';
-interface AlertItem {
-  key: string;
-  severity: AlertSeverity;
-  icon: string;
-  head: string;
-  desc: string;
-  actionLabel: string;
-  count: number;
-}
 
 function deriveAlerts(rows: readonly AssetRow[]): AlertItem[] {
   const out: AlertItem[] = [];

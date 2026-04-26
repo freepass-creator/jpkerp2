@@ -20,6 +20,16 @@ import { toast } from 'sonner';
 
 import { EditableField } from '@/components/shared/editable-field';
 import { JpkGrid, type JpkGridApi } from '@/components/shared/jpk-grid';
+import {
+  ErrorBox,
+  LoadingBox,
+  PanelHeader,
+  PlaceholderBlock,
+  StatSep,
+  TableFoot,
+  cellTd,
+  cellTh,
+} from '@/components/v3/panels';
 import { useRtdbCollection } from '@/lib/collections/rtdb';
 import { getRtdb } from '@/lib/firebase/rtdb';
 import { rowNumColumn, typedColumn } from '@/lib/grid/typed-column';
@@ -148,18 +158,16 @@ function CompanySubpage() {
   return (
     <div className="v3-subpage is-active">
       <div className="v3-alerts">
-        <div className="v3-alerts-head">
-          <i className="ph ph-buildings ico" />
-          <span className="title">회사 기본정보</span>
-          <span className="count">· {data.biz_name || '회사명 미입력'}</span>
-        </div>
+        <PanelHeader
+          icon="ph-buildings"
+          title="회사 기본정보"
+          count={`· ${data.biz_name || '회사명 미입력'}`}
+        />
       </div>
 
       <div className="v3-table-wrap">
         {isLoading ? (
-          <div style={{ padding: 24, color: 'var(--c-text-muted)', textAlign: 'center' }}>
-            <i className="ph ph-spinner spin" /> 회사 정보 로드 중...
-          </div>
+          <LoadingBox label="회사 정보 로드 중..." />
         ) : (
           <div style={{ padding: 16, maxWidth: 800 }}>
             <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
@@ -173,9 +181,9 @@ function CompanySubpage() {
         )}
       </div>
 
-      <div className="v3-table-foot">
-        <div style={{ color: 'var(--c-text-muted)' }}>필드 클릭 → 자동 저장 (저장 버튼 없음)</div>
-      </div>
+      <TableFoot>
+        <span className="v3-stat-mut">필드 클릭 → 자동 저장 (저장 버튼 없음)</span>
+      </TableFoot>
     </div>
   );
 }
@@ -251,27 +259,18 @@ function StaffSubpage() {
   return (
     <div className="v3-subpage is-active">
       <div className="v3-alerts">
-        <div className="v3-alerts-head">
-          <i className="ph ph-users ico" />
-          <span className="title">직원</span>
-          <span className="count">
-            · 재직 {stats.active}명 · 휴직 {stats.leave}명 · 퇴직 {stats.resigned}명
-          </span>
-        </div>
+        <PanelHeader
+          icon="ph-users"
+          title="직원"
+          count={`· 재직 ${stats.active}명 · 휴직 ${stats.leave}명 · 퇴직 ${stats.resigned}명`}
+        />
       </div>
 
       <div className="v3-table-wrap">
         {users.loading ? (
-          <div style={{ padding: 24, color: 'var(--c-text-muted)', textAlign: 'center' }}>
-            <i className="ph ph-spinner spin" /> 직원 데이터 로드 중...
-          </div>
+          <LoadingBox label="직원 데이터 로드 중..." />
         ) : users.error ? (
-          <div style={{ padding: 24 }}>
-            <div style={{ fontWeight: 600, color: 'var(--c-err)', marginBottom: 4 }}>
-              데이터 로드 실패
-            </div>
-            <div style={{ color: 'var(--c-text-sub)' }}>{users.error.message}</div>
-          </div>
+          <ErrorBox error={users.error} />
         ) : (
           <div className="v3-grid-host">
             <JpkGrid<StaffRow>
@@ -285,16 +284,15 @@ function StaffSubpage() {
         )}
       </div>
 
-      <div className="v3-table-foot">
-        <div>
-          총 {stats.total}명<span className="sep">│</span>
-          재직 {stats.active}
-          <span className="sep">│</span>
-          휴직 {stats.leave}
-          <span className="sep">│</span>
-          퇴직 {stats.resigned}
-        </div>
-      </div>
+      <TableFoot>
+        총 {stats.total}명
+        <StatSep />
+        재직 {stats.active}
+        <StatSep />
+        휴직 {stats.leave}
+        <StatSep />
+        퇴직 {stats.resigned}
+      </TableFoot>
     </div>
   );
 }
@@ -328,24 +326,18 @@ function DeptSubpage() {
   return (
     <div className="v3-subpage is-active">
       <div className="v3-alerts">
-        <div className="v3-alerts-head">
-          <i className="ph ph-tree-structure ico" />
-          <span className="title">부서·팀</span>
-          <span className="count">
-            · {rows.length}개 부서 · 인원 {users.data.length}
-          </span>
-        </div>
+        <PanelHeader
+          icon="ph-tree-structure"
+          title="부서·팀"
+          count={`· ${rows.length}개 부서 · 인원 ${users.data.length}`}
+        />
       </div>
 
       <div className="v3-table-wrap">
         {users.loading ? (
-          <div style={{ padding: 24, color: 'var(--c-text-muted)', textAlign: 'center' }}>
-            <i className="ph ph-spinner spin" /> 데이터 로드 중...
-          </div>
+          <LoadingBox label="데이터 로드 중..." />
         ) : rows.length === 0 ? (
-          <div style={{ padding: 24, color: 'var(--c-text-muted)', textAlign: 'center' }}>
-            등록된 부서가 없습니다. 직원관리에서 부서를 입력하면 자동 집계됩니다.
-          </div>
+          <LoadingBox label="등록된 부서가 없습니다. 직원관리에서 부서를 입력하면 자동 집계됩니다." />
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
@@ -375,14 +367,11 @@ function DeptSubpage() {
         )}
       </div>
 
-      <div className="v3-table-foot">
-        <div>
-          {rows.length}개 부서 · 총 {users.data.length}명<span className="sep">│</span>
-          <span style={{ color: 'var(--c-text-muted)' }}>
-            (직원 department 필드 자동 집계 — 부서 마스터 미구현)
-          </span>
-        </div>
-      </div>
+      <TableFoot>
+        {rows.length}개 부서 · 총 {users.data.length}명
+        <StatSep />
+        <span className="v3-stat-mut">(직원 department 필드 자동 집계 — 부서 마스터 미구현)</span>
+      </TableFoot>
     </div>
   );
 }
@@ -393,42 +382,16 @@ function PlaceholderSubpage({ label, icon }: { label: string; icon: string }) {
   return (
     <div className="v3-subpage is-active">
       <div className="v3-alerts">
-        <div className="v3-alerts-head">
-          <i className={`ph ${icon} ico`} />
-          <span className="title">{label}</span>
-          <span className="count">· 준비 중</span>
-        </div>
+        <PanelHeader icon={icon} title={label} count="· 준비 중" />
       </div>
-      <div className="v3-placeholder">
-        <i className="ph ph-hourglass-medium" />
-        <div className="title">{label} 준비 중</div>
-        <div className="desc">
-          {label === '정책·규정'
+      <PlaceholderBlock
+        title={`${label} 준비 중`}
+        desc={
+          label === '정책·규정'
             ? '대여 약관·요금 산정·정비 규정 등 사내 규정 관리 화면'
-            : '임대료·인건비·광고·통신 등 일반 운영비 관리 화면'}
-        </div>
-      </div>
+            : '임대료·인건비·광고·통신 등 일반 운영비 관리 화면'
+        }
+      />
     </div>
   );
-}
-
-/* ── helpers ── */
-
-function cellTh(width?: number): React.CSSProperties {
-  return {
-    padding: '6px 8px',
-    fontSize: 11,
-    fontWeight: 600,
-    color: 'var(--c-text-sub)',
-    textAlign: 'center',
-    width,
-  };
-}
-
-function cellTd(): React.CSSProperties {
-  return {
-    padding: '6px 8px',
-    textAlign: 'center',
-    color: 'var(--c-text)',
-  };
 }

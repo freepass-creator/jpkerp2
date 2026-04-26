@@ -14,6 +14,7 @@
  * Empty state: 모든 미결 0건 → 큰 ✓ 메시지
  */
 
+import { LoadingBox } from '@/components/v3/panels';
 import { useRtdbCollection } from '@/lib/collections/rtdb';
 import {
   CATEGORY_META,
@@ -101,17 +102,7 @@ export default function PendingPage() {
       </div>
 
       {anyLoading ? (
-        <div
-          style={{
-            padding: 24,
-            color: 'var(--c-text-muted)',
-            textAlign: 'center',
-            background: 'var(--c-surface)',
-            border: '1px solid var(--c-border)',
-          }}
-        >
-          <i className="ph ph-spinner spin" /> 미결 데이터 로드 중...
-        </div>
+        <LoadingBox label="미결 데이터 로드 중..." />
       ) : isEmpty ? (
         <div className="pending-empty">
           <i className="ph ph-check-circle" />

@@ -4,12 +4,26 @@ import { EditDialog } from '@/components/shared/edit-dialog';
 import type { JpkGridApi } from '@/components/shared/jpk-grid';
 import { ContractDetailPanel } from '@/components/v3/ContractDetailPanel';
 import { PenaltyBatchTool } from '@/components/v3/PenaltyBatchTool';
+import {
+  AlertCard,
+  AlertsPanel,
+  ErrorBox,
+  LoadingBox,
+  PanelHeader,
+  PlaceholderBlock,
+  StatDot,
+  StatSep,
+  TableFoot,
+  cellTd,
+  cellTh,
+} from '@/components/v3/panels';
 import { useAuth } from '@/lib/auth/context';
 import { useRtdbCollection } from '@/lib/collections/rtdb';
 import { computeContractEnd, today as todayStr } from '@/lib/date-utils';
 import { saveEvent } from '@/lib/firebase/events';
 import { sanitizeCarNumber } from '@/lib/format-input';
 import type { RtdbAsset, RtdbBilling, RtdbContract, RtdbEvent } from '@/lib/types/rtdb-entities';
+import type { AlertItem } from '@/lib/types/v3-ui';
 import { fmt } from '@/lib/utils';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -162,22 +176,7 @@ export default function ContractPage() {
         </div>
         <div className="action">
           {activeTab.action === '' ? null : activeTab.href ? (
-            <Link
-              href={activeTab.href}
-              style={{
-                textDecoration: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                height: 24,
-                padding: '0 8px',
-                background: 'var(--c-accent)',
-                color: 'var(--c-text-inv)',
-                border: '1px solid var(--c-accent)',
-              }}
-            >
-              {activeTab.action}
-            </Link>
+            <Link href={activeTab.href}>{activeTab.action}</Link>
           ) : (
             <button type="button" onClick={handleAction}>
               {activeTab.action}
@@ -236,50 +235,15 @@ function ContractListSubpage({
   onRowClick: (r: ContractRow) => void;
   count: number;
 }) {
-  const isClear = alerts.length === 0;
-  const totalAlerts = alerts.reduce((sum, a) => sum + a.count, 0);
-
   return (
     <div className="v3-subpage is-active">
-      <div className={`v3-alerts ${isClear ? 'is-clear' : ''}`}>
-        <div className="v3-alerts-head">
-          <span className="dot" />
-          <span className="title">{isClear ? '계약 미결 없음' : '계약 미결'}</span>
-          <span className="count">{isClear ? '· 0건' : `· ${totalAlerts}건`}</span>
-        </div>
-        {!isClear && (
-          <div className="v3-alerts-grid">
-            {alerts.map((a) => (
-              <div
-                key={a.key}
-                className={`v3-alert-card ${a.severity === 'danger' ? 'is-danger' : a.severity === 'info' ? 'is-info' : ''}`}
-              >
-                <i className={`ph ${a.icon} ico`} />
-                <div className="body">
-                  <div className="head">{a.head}</div>
-                  <div className="desc">{a.desc}</div>
-                </div>
-                <button type="button" className="alert-btn">
-                  {a.actionLabel}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <AlertsPanel alerts={alerts} clearTitle="계약 미결 없음" pendingTitle="계약 미결" />
 
       <div className="v3-table-wrap">
         {loading ? (
-          <div style={{ padding: 24, color: 'var(--c-text-muted)', textAlign: 'center' }}>
-            <i className="ph ph-spinner spin" /> 계약 데이터 로드 중...
-          </div>
+          <LoadingBox label="계약 데이터 로드 중..." />
         ) : error ? (
-          <div style={{ padding: 24 }}>
-            <div style={{ fontWeight: 600, color: 'var(--c-err)', marginBottom: 4 }}>
-              데이터 로드 실패
-            </div>
-            <div style={{ color: 'var(--c-text-sub)' }}>{error.message}</div>
-          </div>
+          <ErrorBox error={error} />
         ) : (
           <div className="v3-grid-host">
             <ContractClient
@@ -291,23 +255,21 @@ function ContractListSubpage({
         )}
       </div>
 
-      <div className="v3-table-foot">
-        <div>
-          총 {count || stats.total}건<span className="sep">│</span>
-          <span className="stat-dot active" />
-          대여중 {stats.active}
-          <span className="sep">│</span>
-          <span className="stat-dot repair" />
-          시동제어 {stats.engineLock}
-          <span className="sep">│</span>
-          <span className="stat-dot sale" />
-          미납·반납지연 {stats.overdueOrLate}
-          <span className="sep">│</span>
-          <span className="stat-dot idle" />
-          출고대기 {stats.waitingRelease}
-        </div>
-        <div style={{ color: 'var(--c-text-muted)' }}>행 클릭 시 계약 편집</div>
-      </div>
+      <TableFoot trailing="행 클릭 시 계약 편집">
+        총 {count || stats.total}건
+        <StatSep />
+        <StatDot variant="active" />
+        대여중 {stats.active}
+        <StatSep />
+        <StatDot variant="repair" />
+        시동제어 {stats.engineLock}
+        <StatSep />
+        <StatDot variant="sale" />
+        미납·반납지연 {stats.overdueOrLate}
+        <StatSep />
+        <StatDot variant="idle" />
+        출고대기 {stats.waitingRelease}
+      </TableFoot>
     </div>
   );
 }
@@ -330,64 +292,60 @@ function IdleSubpage({
   return (
     <div className="v3-subpage is-active">
       <div className="v3-alerts">
-        <div className="v3-alerts-head">
-          <span className="dot" />
-          <span className="title">휴차풀</span>
-          <span className="count">· {idleRows.length}대 (4 sub-status)</span>
-        </div>
+        <PanelHeader title="휴차풀" count={`· ${idleRows.length}대 (4 sub-status)`} />
         <div className="v3-alerts-grid">
-          <div className="v3-alert-card is-info">
-            <i className="ph ph-wrench ico" />
-            <div className="body">
-              <div className="head">상품화중 [{alerts.preparing}]</div>
-              <div className="desc">재임대 준비 작업 진행 (정비·청소·촬영)</div>
-            </div>
-            <button type="button" className="alert-btn">
-              목록
-            </button>
-          </div>
-          <div className="v3-alert-card">
-            <i className="ph ph-bed ico" />
-            <div className="body">
-              <div className="head">차고지 대기 [{alerts.waiting}]</div>
-              <div className="desc">반납 후 결정 미정</div>
-            </div>
-            <button type="button" className="alert-btn">
-              결정
-            </button>
-          </div>
-          <div className="v3-alert-card is-info">
-            <i className="ph ph-check-circle ico" />
-            <div className="body">
-              <div className="head">상품완료 [{alerts.ready}]</div>
-              <div className="desc">freepass-v2 노출 중 — 영업 대기</div>
-            </div>
-            <button type="button" className="alert-btn">
-              노출
-            </button>
-          </div>
-          <div className="v3-alert-card is-danger">
-            <i className="ph ph-currency-krw ico" />
-            <div className="body">
-              <div className="head">매각 대기 [{alerts.disposal}]</div>
-              <div className="desc">처분 진행 필요</div>
-            </div>
-            <button type="button" className="alert-btn">
-              매각
-            </button>
-          </div>
+          <AlertCard
+            alert={{
+              key: 'preparing',
+              severity: 'info',
+              icon: 'ph-wrench',
+              head: `상품화중 [${alerts.preparing}]`,
+              desc: '재임대 준비 작업 진행 (정비·청소·촬영)',
+              actionLabel: '목록',
+              count: alerts.preparing,
+            }}
+          />
+          <AlertCard
+            alert={{
+              key: 'waiting',
+              severity: 'warn',
+              icon: 'ph-bed',
+              head: `차고지 대기 [${alerts.waiting}]`,
+              desc: '반납 후 결정 미정',
+              actionLabel: '결정',
+              count: alerts.waiting,
+            }}
+          />
+          <AlertCard
+            alert={{
+              key: 'ready',
+              severity: 'info',
+              icon: 'ph-check-circle',
+              head: `상품완료 [${alerts.ready}]`,
+              desc: 'freepass-v2 노출 중 — 영업 대기',
+              actionLabel: '노출',
+              count: alerts.ready,
+            }}
+          />
+          <AlertCard
+            alert={{
+              key: 'disposal',
+              severity: 'danger',
+              icon: 'ph-currency-krw',
+              head: `매각 대기 [${alerts.disposal}]`,
+              desc: '처분 진행 필요',
+              actionLabel: '매각',
+              count: alerts.disposal,
+            }}
+          />
         </div>
       </div>
 
       <div className="v3-table-wrap">
         {loading ? (
-          <div style={{ padding: 24, color: 'var(--c-text-muted)', textAlign: 'center' }}>
-            <i className="ph ph-spinner spin" /> 휴차 데이터 로드 중...
-          </div>
+          <LoadingBox label="휴차 데이터 로드 중..." />
         ) : idleRows.length === 0 ? (
-          <div style={{ padding: 24, color: 'var(--c-text-muted)', textAlign: 'center' }}>
-            휴차 차량이 없습니다.
-          </div>
+          <LoadingBox label="휴차 차량이 없습니다." />
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
@@ -423,18 +381,17 @@ function IdleSubpage({
         )}
       </div>
 
-      <div className="v3-table-foot">
-        <div>
-          총 {idleRows.length}대<span className="sep">│</span>
-          상품화중 {alerts.preparing}
-          <span className="sep">│</span>
-          차고지대기 {alerts.waiting}
-          <span className="sep">│</span>
-          상품완료 {alerts.ready}
-          <span className="sep">│</span>
-          매각대기 {alerts.disposal}
-        </div>
-      </div>
+      <TableFoot>
+        총 {idleRows.length}대
+        <StatSep />
+        상품화중 {alerts.preparing}
+        <StatSep />
+        차고지대기 {alerts.waiting}
+        <StatSep />
+        상품완료 {alerts.ready}
+        <StatSep />
+        매각대기 {alerts.disposal}
+      </TableFoot>
     </div>
   );
 }
@@ -451,64 +408,59 @@ function OverdueSubpage({
 }) {
   // filter='locked' → 시동제어 카드 강조 hint (현재는 표시만, 미래 행 필터에 활용)
   void filter;
-  const isClear = alerts.severeCount === 0 && alerts.midCount === 0 && alerts.lockedCount === 0;
+  const overdueAlertItems = useMemo<AlertItem[]>(() => {
+    const out: AlertItem[] = [];
+    if (alerts.severeCount > 0) {
+      out.push({
+        key: 'severe',
+        severity: 'danger',
+        icon: 'ph-warning',
+        head: `D+30 초과 [${alerts.severeCount}]`,
+        desc: alerts.severeDesc || '해당 없음',
+        actionLabel: '독촉',
+        count: alerts.severeCount,
+      });
+    }
+    if (alerts.midCount > 0) {
+      out.push({
+        key: 'mid',
+        severity: 'warn',
+        icon: 'ph-clock',
+        head: `D+7~30 [${alerts.midCount}]`,
+        desc: alerts.midDesc || '해당 없음',
+        actionLabel: '독촉',
+        count: alerts.midCount,
+      });
+    }
+    if (alerts.lockedCount > 0) {
+      out.push({
+        key: 'locked',
+        severity: 'danger',
+        icon: 'ph-lock',
+        head: `시동제어 중 [${alerts.lockedCount}]`,
+        desc: alerts.lockedDesc || '해당 없음',
+        actionLabel: '확인',
+        count: alerts.lockedCount,
+      });
+    }
+    return out;
+  }, [alerts]);
   const total = alerts.severeCount + alerts.midCount;
 
   return (
     <div className="v3-subpage is-active">
-      <div className={`v3-alerts ${isClear ? 'is-clear' : ''}`}>
-        <div className="v3-alerts-head">
-          <span className="dot" />
-          <span className="title">{isClear ? '미납 없음' : '미납관리'}</span>
-          <span className="count">
-            {isClear ? '· 0건' : `· ${total}건 미납 + ${alerts.lockedCount}건 시동제어`}
-          </span>
-        </div>
-        {!isClear && (
-          <div className="v3-alerts-grid">
-            <div className="v3-alert-card is-danger">
-              <i className="ph ph-warning ico" />
-              <div className="body">
-                <div className="head">D+30 초과 [{alerts.severeCount}]</div>
-                <div className="desc">{alerts.severeDesc || '해당 없음'}</div>
-              </div>
-              <button type="button" className="alert-btn">
-                독촉
-              </button>
-            </div>
-            <div className="v3-alert-card">
-              <i className="ph ph-clock ico" />
-              <div className="body">
-                <div className="head">D+7~30 [{alerts.midCount}]</div>
-                <div className="desc">{alerts.midDesc || '해당 없음'}</div>
-              </div>
-              <button type="button" className="alert-btn">
-                독촉
-              </button>
-            </div>
-            <div className="v3-alert-card is-danger">
-              <i className="ph ph-lock ico" />
-              <div className="body">
-                <div className="head">시동제어 중 [{alerts.lockedCount}]</div>
-                <div className="desc">{alerts.lockedDesc || '해당 없음'}</div>
-              </div>
-              <button type="button" className="alert-btn">
-                확인
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      <AlertsPanel
+        alerts={overdueAlertItems}
+        clearTitle="미납 없음"
+        pendingTitle="미납관리"
+        pendingCountLabel={`· ${total}건 미납 + ${alerts.lockedCount}건 시동제어`}
+      />
 
       <div className="v3-table-wrap">
         {loading ? (
-          <div style={{ padding: 24, color: 'var(--c-text-muted)', textAlign: 'center' }}>
-            <i className="ph ph-spinner spin" /> 미납 데이터 로드 중...
-          </div>
+          <LoadingBox label="미납 데이터 로드 중..." />
         ) : alerts.rows.length === 0 ? (
-          <div style={{ padding: 24, color: 'var(--c-text-muted)', textAlign: 'center' }}>
-            미납 청구가 없습니다.
-          </div>
+          <LoadingBox label="미납 청구가 없습니다." />
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
@@ -560,16 +512,15 @@ function OverdueSubpage({
         )}
       </div>
 
-      <div className="v3-table-foot">
-        <div>
-          총 {alerts.rows.length}건<span className="sep">│</span>
-          D+30 초과 {alerts.severeCount}
-          <span className="sep">│</span>
-          D+7~30 {alerts.midCount}
-          <span className="sep">│</span>
-          시동제어 {alerts.lockedCount}
-        </div>
-      </div>
+      <TableFoot>
+        총 {alerts.rows.length}건
+        <StatSep />
+        D+30 초과 {alerts.severeCount}
+        <StatSep />
+        D+7~30 {alerts.midCount}
+        <StatSep />
+        시동제어 {alerts.lockedCount}
+      </TableFoot>
     </div>
   );
 }
@@ -578,11 +529,10 @@ function OverdueSubpage({
 function PlaceholderSubpage({ label }: { label: string }) {
   return (
     <div className="v3-subpage is-active">
-      <div className="v3-placeholder">
-        <i className="ph ph-hourglass-medium" />
-        <div className="title">{label} 준비 중</div>
-        <div className="desc">계약 단위로 통합된 {label} 관리 화면을 구현 중입니다.</div>
-      </div>
+      <PlaceholderBlock
+        title={`${label} 준비 중`}
+        desc={`계약 단위로 통합된 ${label} 관리 화면을 구현 중입니다.`}
+      />
     </div>
   );
 }
@@ -705,17 +655,6 @@ function dialogInput(): React.CSSProperties {
 }
 
 /* ═════════ 미결 derive 로직 ═════════ */
-
-type AlertSeverity = 'danger' | 'warn' | 'info';
-interface AlertItem {
-  key: string;
-  severity: AlertSeverity;
-  icon: string;
-  head: string;
-  desc: string;
-  actionLabel: string;
-  count: number;
-}
 
 function deriveContractAlerts(
   contracts: readonly RtdbContract[],
@@ -1022,23 +961,4 @@ function daysAfter(date?: string): number {
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return 0;
   return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
-}
-
-function cellTh(width?: number): React.CSSProperties {
-  return {
-    padding: '6px 8px',
-    fontSize: 11,
-    fontWeight: 600,
-    color: 'var(--c-text-sub)',
-    textAlign: 'center',
-    width,
-  };
-}
-
-function cellTd(): React.CSSProperties {
-  return {
-    padding: '6px 8px',
-    textAlign: 'center',
-    color: 'var(--c-text)',
-  };
 }

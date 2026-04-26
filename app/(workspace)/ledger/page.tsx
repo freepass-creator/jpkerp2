@@ -2,6 +2,17 @@
 
 import { EditDialog } from '@/components/shared/edit-dialog';
 import type { JpkGridApi } from '@/components/shared/jpk-grid';
+import {
+  AlertCard,
+  AlertsPanel,
+  ErrorBox,
+  LoadingBox,
+  PanelHeader,
+  StatSep,
+  TableFoot,
+  cellTd,
+  cellTh,
+} from '@/components/v3/panels';
 import { useAuth } from '@/lib/auth/context';
 import { useRtdbCollection } from '@/lib/collections/rtdb';
 import { parseCsv } from '@/lib/csv';
@@ -11,6 +22,7 @@ import { sanitizeCarNumber } from '@/lib/format-input';
 import * as bankShinhan from '@/lib/parsers/bank-shinhan';
 import * as cardShinhan from '@/lib/parsers/card-shinhan';
 import type { RtdbBilling, RtdbEvent } from '@/lib/types/rtdb-entities';
+import type { AlertItem } from '@/lib/types/v3-ui';
 import { fmt } from '@/lib/utils';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -178,50 +190,16 @@ function FinanceListSubpage({
 }) {
   // filter='unmatched' → 미매칭 행만 표시 hint (현재는 표시만)
   void filter;
-  const isClear = alerts.length === 0;
-  const totalAlerts = alerts.reduce((sum, a) => sum + a.count, 0);
 
   return (
     <div className="v3-subpage is-active">
-      {/* 미결 패널 */}
-      <div className={`v3-alerts ${isClear ? 'is-clear' : ''}`}>
-        <div className="v3-alerts-head">
-          <span className="dot" />
-          <span className="title">{isClear ? '재무 미결 없음' : '재무 미결'}</span>
-          <span className="count">{isClear ? '· 0건' : `· ${totalAlerts}건`}</span>
-        </div>
-        {!isClear && (
-          <div className="v3-alerts-grid">
-            {alerts.map((a) => (
-              <div
-                key={a.key}
-                className={`v3-alert-card ${a.severity === 'danger' ? 'is-danger' : a.severity === 'info' ? 'is-info' : ''}`}
-              >
-                <i className={`ph ${a.icon} ico`} />
-                <div className="body">
-                  <div className="head">{a.head}</div>
-                  <div className="desc">{a.desc}</div>
-                </div>
-                <button type="button" className="alert-btn">
-                  {a.actionLabel}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <AlertsPanel alerts={alerts} clearTitle="재무 미결 없음" pendingTitle="재무 미결" />
 
-      {/* AG Grid (LedgerClient wrap) */}
       <div className="v3-table-wrap">
         {loading ? (
-          <div className="v3-loading">
-            <i className="ph ph-spinner spin" /> 입출금 데이터 로드 중...
-          </div>
+          <LoadingBox label="입출금 데이터 로드 중..." />
         ) : error ? (
-          <div className="v3-error-box">
-            <div className="head">데이터 로드 실패</div>
-            <div className="msg">{error.message}</div>
-          </div>
+          <ErrorBox error={error} />
         ) : (
           <div className="v3-grid-host">
             <LedgerClient gridRef={gridRef} onCountChange={onCountChange} />
@@ -229,18 +207,15 @@ function FinanceListSubpage({
         )}
       </div>
 
-      {/* table-foot: 수입·지출·예수금 합계 */}
-      <div className="v3-table-foot">
-        <div>
-          총 {count || stats.total}건<span className="sep">│</span>
-          수입 <span className="v3-stat-pos">+{fmt(stats.inflow)}</span>
-          <span className="sep">│</span>
-          지출 <span className="v3-stat-neg">-{fmt(stats.outflow)}</span>
-          <span className="sep">│</span>
-          <span className="v3-stat-mut">미매칭 {stats.unmatched}건</span>
-        </div>
-        <div className="v3-stat-mut">행 클릭 시 거래 매칭</div>
-      </div>
+      <TableFoot trailing="행 클릭 시 거래 매칭">
+        총 {count || stats.total}건
+        <StatSep />
+        수입 <span className="v3-stat-pos">+{fmt(stats.inflow)}</span>
+        <StatSep />
+        지출 <span className="v3-stat-neg">-{fmt(stats.outflow)}</span>
+        <StatSep />
+        <span className="v3-stat-mut">미매칭 {stats.unmatched}건</span>
+      </TableFoot>
     </div>
   );
 }
@@ -270,40 +245,37 @@ function DailyReportSubpage({
   return (
     <div className="v3-subpage is-active">
       <div className={`v3-alerts ${todayReportWritten ? 'is-clear' : ''}`}>
-        <div className="v3-alerts-head">
-          <span className="dot" />
-          <span className="title">
-            {todayReportWritten ? `자금일보 — ${tStr} 작성 완료` : '자금일보 미작성'}
-          </span>
-          <span className="count">
-            {todayReportWritten
+        <PanelHeader
+          title={todayReportWritten ? `자금일보 — ${tStr} 작성 완료` : '자금일보 미작성'}
+          count={
+            todayReportWritten
               ? `· ${rows.find((r) => r.date === tStr)?.count ?? 0}건 거래`
-              : `· 오늘(${tStr}) 자금일보 필요${todayHasTx ? ' · 거래 있음' : ''}`}
-          </span>
-        </div>
+              : `· 오늘(${tStr}) 자금일보 필요${todayHasTx ? ' · 거래 있음' : ''}`
+          }
+        />
         {!todayReportWritten && (
           <div className="v3-alerts-grid">
-            <div className="v3-alert-card is-danger">
-              <i className="ph ph-coins ico" />
-              <div className="body">
-                <div className="head">오늘 자금일보 미작성</div>
-                <div className="desc">거래 입력 후 자금일보 작성 → 일자별 수입·지출 마감</div>
-              </div>
-              <button type="button" className="alert-btn" onClick={onWriteClick}>
-                작성
-              </button>
-            </div>
+            <AlertCard
+              alert={{
+                key: 'today-not-written',
+                severity: 'danger',
+                icon: 'ph-coins',
+                head: '오늘 자금일보 미작성',
+                desc: '거래 입력 후 자금일보 작성 → 일자별 수입·지출 마감',
+                actionLabel: '작성',
+                count: 1,
+              }}
+              onClick={onWriteClick}
+            />
           </div>
         )}
       </div>
 
       <div className="v3-table-wrap">
         {loading ? (
-          <div className="v3-loading">
-            <i className="ph ph-spinner spin" /> 자금일보 데이터 로드 중...
-          </div>
+          <LoadingBox label="자금일보 데이터 로드 중..." />
         ) : rows.length === 0 ? (
-          <div className="v3-loading">거래 데이터가 없습니다.</div>
+          <LoadingBox label="거래 데이터가 없습니다." />
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
@@ -365,13 +337,11 @@ function DailyReportSubpage({
         )}
       </div>
 
-      <div className="v3-table-foot">
-        <div>
-          최근 {Math.min(rows.length, 60)}일 일자별 거래 자동 집계
-          <span className="sep">│</span>
-          <span className="v3-stat-mut">(자금일보 events 도입 전 — 거래 데이터 자동 derive)</span>
-        </div>
-      </div>
+      <TableFoot>
+        최근 {Math.min(rows.length, 60)}일 일자별 거래 자동 집계
+        <StatSep />
+        <span className="v3-stat-mut">(자금일보 events 도입 전 — 거래 데이터 자동 derive)</span>
+      </TableFoot>
     </div>
   );
 }
@@ -449,15 +419,10 @@ function TaxInvoiceSubpage({
   return (
     <div className="v3-subpage is-active">
       <div className={`v3-alerts ${unissued.length === 0 ? 'is-clear' : ''}`}>
-        <div className="v3-alerts-head">
-          <span className="dot" />
-          <span className="title">
-            세금계산서 — {ym} {unissued.length === 0 ? '발행 완료' : `미발행 ${unissued.length}건`}
-          </span>
-          <span className="count">
-            · 회원사 {partnerRows.length}곳 · 발행 {issued.length} / 미발행 {unissued.length}
-          </span>
-        </div>
+        <PanelHeader
+          title={`세금계산서 — ${ym} ${unissued.length === 0 ? '발행 완료' : `미발행 ${unissued.length}건`}`}
+          count={`· 회원사 ${partnerRows.length}곳 · 발행 ${issued.length} / 미발행 ${unissued.length}`}
+        />
         <div style={{ padding: '8px 12px', display: 'flex', gap: 8, alignItems: 'center' }}>
           <span style={{ fontSize: 11, color: 'var(--c-text-sub)' }}>대상월</span>
           <input
@@ -481,7 +446,7 @@ function TaxInvoiceSubpage({
 
       <div className="v3-table-wrap">
         {partnerRows.length === 0 ? (
-          <div className="v3-loading">{ym} 월 수납 회원사가 없습니다.</div>
+          <LoadingBox label={`${ym} 월 수납 회원사가 없습니다.`} />
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
@@ -545,13 +510,11 @@ function TaxInvoiceSubpage({
         )}
       </div>
 
-      <div className="v3-table-foot">
-        <div>
-          {ym} 월 수납분 — 회원사별 합계
-          <span className="sep">│</span>
-          <span className="v3-stat-mut">발행은 events.type=tax_invoice 이벤트로 기록</span>
-        </div>
-      </div>
+      <TableFoot>
+        {ym} 월 수납분 — 회원사별 합계
+        <StatSep />
+        <span className="v3-stat-mut">발행은 events.type=tax_invoice 이벤트로 기록</span>
+      </TableFoot>
     </div>
   );
 }
@@ -725,17 +688,6 @@ function DailyReportDialog({
 }
 
 /* ═════════ 미결 derive 로직 ═════════ */
-
-type AlertSeverity = 'danger' | 'warn' | 'info';
-interface AlertItem {
-  key: string;
-  severity: AlertSeverity;
-  icon: string;
-  head: string;
-  desc: string;
-  actionLabel: string;
-  count: number;
-}
 
 function deriveFinanceAlerts(
   events: readonly RtdbEvent[],
@@ -923,25 +875,6 @@ function monthEnd(yyyymm: string): string {
   if (!y || !m) return yyyymm;
   const last = new Date(y, m, 0).getDate();
   return `${yyyymm}-${String(last).padStart(2, '0')}`;
-}
-
-function cellTh(width?: number): React.CSSProperties {
-  return {
-    padding: '6px 8px',
-    fontSize: 11,
-    fontWeight: 600,
-    color: 'var(--c-text-sub)',
-    textAlign: 'center',
-    width,
-  };
-}
-
-function cellTd(): React.CSSProperties {
-  return {
-    padding: '6px 8px',
-    textAlign: 'center',
-    color: 'var(--c-text)',
-  };
 }
 
 /* ═════════ CSV 업로드 모달 ═════════ */

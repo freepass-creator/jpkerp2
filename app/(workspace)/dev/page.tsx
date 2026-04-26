@@ -18,6 +18,7 @@
  */
 
 import { JpkGrid } from '@/components/shared/jpk-grid';
+import { cellTd, cellTh } from '@/components/v3/panels';
 import { useRtdbCollection } from '@/lib/collections/rtdb';
 import { computeTotalDue } from '@/lib/date-utils';
 import { getRtdb } from '@/lib/firebase/rtdb';
@@ -1405,23 +1406,4 @@ function severityColor(s: IntegrityRow['severity']): string {
   if (s === 'critical') return 'var(--c-err)';
   if (s === 'warn') return 'var(--c-warn)';
   return 'var(--c-info)';
-}
-
-function cellTh(width?: number): React.CSSProperties {
-  return {
-    padding: '6px 8px',
-    fontSize: 11,
-    fontWeight: 600,
-    color: 'var(--c-text-sub)',
-    textAlign: 'center',
-    width,
-  };
-}
-
-function cellTd(): React.CSSProperties {
-  return {
-    padding: '6px 8px',
-    textAlign: 'center',
-    color: 'var(--c-text)',
-  };
 }

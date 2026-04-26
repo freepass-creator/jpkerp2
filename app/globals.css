@@ -2826,7 +2826,8 @@ i.ph {
   border-left: 1px solid var(--c-border);
   margin-left: auto;
 }
-.v3-tabs .action button {
+.v3-tabs .action button,
+.v3-tabs .action a {
   height: 24px;
   padding: 0 8px;
   font-size: var(--fs);
@@ -2839,8 +2840,14 @@ i.ph {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  text-decoration: none;
 }
-.v3-tabs .action button:hover { background: var(--c-accent-hover); border-color: var(--c-accent-hover); }
+.v3-tabs .action button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.v3-tabs .action button:hover:not(:disabled),
+.v3-tabs .action a:hover { background: var(--c-accent-hover); border-color: var(--c-accent-hover); }
 .v3-tabs .action button.is-secondary {
   background: var(--c-surface);
   color: var(--c-text);
