@@ -1,14 +1,20 @@
 'use client';
 
+import { EditDialog } from '@/components/shared/edit-dialog';
 import type { JpkGridApi } from '@/components/shared/jpk-grid';
 import { ContractDetailPanel } from '@/components/v3/ContractDetailPanel';
 import { PenaltyBatchTool } from '@/components/v3/PenaltyBatchTool';
+import { useAuth } from '@/lib/auth/context';
 import { useRtdbCollection } from '@/lib/collections/rtdb';
 import { computeContractEnd, today as todayStr } from '@/lib/date-utils';
+import { saveEvent } from '@/lib/firebase/events';
+import { sanitizeCarNumber } from '@/lib/format-input';
 import type { RtdbAsset, RtdbBilling, RtdbContract, RtdbEvent } from '@/lib/types/rtdb-entities';
 import { fmt } from '@/lib/utils';
 import Link from 'next/link';
-import { useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { ContractClient, type ContractRow } from './contract-client';
 
 type SubpageId =
@@ -50,9 +56,31 @@ const TAB_CRUMB: Record<SubpageId, string> = {
   'contract-terminated': '해지리스트',
 };
 
+/** URL `?tab=` 약자 → 내부 SubpageId */
+const TAB_ALIAS: Record<string, SubpageId> = {
+  list: 'contract-list',
+  idle: 'contract-idle',
+  overdue: 'contract-overdue',
+  'release-return': 'contract-release-return',
+  release: 'contract-release-return',
+  return: 'contract-release-return',
+  accident: 'contract-accident',
+  consultation: 'contract-consultation',
+  fine: 'contract-fine',
+  penalty: 'contract-fine',
+  terminated: 'contract-terminated',
+};
+
 export default function ContractPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab') ?? '';
+  // filterParam은 향후 sub-tab 내부 필터링에 사용 (locked / late / pending 등) — 현재는 표시만
+  const filterParam = searchParams.get('filter') ?? '';
+  const initialTab = TAB_ALIAS[tabParam] ?? 'contract-list';
+
   const gridRef = useRef<JpkGridApi<ContractRow> | null>(null);
-  const [active, setActive] = useState<SubpageId>('contract-list');
+  const [active, setActive] = useState<SubpageId>(initialTab);
   const [detailRow, setDetailRow] = useState<ContractRow | null>(null);
   const [count, setCount] = useState(0);
 
@@ -60,6 +88,12 @@ export default function ContractPage() {
   const billings = useRtdbCollection<RtdbBilling>('billings');
   const assets = useRtdbCollection<RtdbAsset>('assets');
   const events = useRtdbCollection<RtdbEvent>('events');
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tabParam만 추적
+  useEffect(() => {
+    const next = TAB_ALIAS[tabParam];
+    if (next && next !== active) setActive(next);
+  }, [tabParam]);
 
   const alerts = useMemo(
     () => deriveContractAlerts(contracts.data, billings.data, events.data),
@@ -76,6 +110,34 @@ export default function ContractPage() {
   );
 
   const activeTab = TABS.find((t) => t.id === active) ?? TABS[0];
+  const [idleModalOpen, setIdleModalOpen] = useState(false);
+
+  /** sub-tab [+] 버튼 클릭 → 라우팅 또는 모달 */
+  const handleAction = () => {
+    switch (active) {
+      case 'contract-idle':
+        setIdleModalOpen(true);
+        break;
+      case 'contract-overdue':
+        router.push('/operation?tab=eungdae&topic=미납독촉&filter=overdue');
+        break;
+      case 'contract-release-return':
+        router.push('/operation?tab=chulgo');
+        break;
+      case 'contract-accident':
+        router.push('/operation?tab=sago');
+        break;
+      case 'contract-consultation':
+        router.push('/operation?tab=eungdae');
+        break;
+      case 'contract-fine':
+        // 같은 탭 내 PenaltyBatchTool — 별도 액션 없음
+        toast.info('아래 일괄 도구를 사용하세요');
+        break;
+      default:
+        break;
+    }
+  };
 
   return (
     <>
@@ -117,12 +179,14 @@ export default function ContractPage() {
               {activeTab.action}
             </Link>
           ) : (
-            <button type="button" disabled>
+            <button type="button" onClick={handleAction}>
               {activeTab.action}
             </button>
           )}
         </div>
       </div>
+
+      <IdleProcessDialog open={idleModalOpen} onClose={() => setIdleModalOpen(false)} />
 
       {active === 'contract-list' ? (
         <ContractListSubpage
@@ -138,7 +202,7 @@ export default function ContractPage() {
       ) : active === 'contract-idle' ? (
         <IdleSubpage loading={assets.loading} rows={assets.data} alerts={idleAlerts} />
       ) : active === 'contract-overdue' ? (
-        <OverdueSubpage loading={billings.loading} alerts={overdueAlerts} />
+        <OverdueSubpage loading={billings.loading} alerts={overdueAlerts} filter={filterParam} />
       ) : active === 'contract-fine' ? (
         <div className="v3-subpage is-active">
           <PenaltyBatchTool />
@@ -379,10 +443,14 @@ function IdleSubpage({
 function OverdueSubpage({
   loading,
   alerts,
+  filter,
 }: {
   loading: boolean;
   alerts: OverdueAlertGroup;
+  filter?: string;
 }) {
+  // filter='locked' → 시동제어 카드 강조 hint (현재는 표시만, 미래 행 필터에 활용)
+  void filter;
   const isClear = alerts.severeCount === 0 && alerts.midCount === 0 && alerts.lockedCount === 0;
   const total = alerts.severeCount + alerts.midCount;
 
@@ -517,6 +585,123 @@ function PlaceholderSubpage({ label }: { label: string }) {
       </div>
     </div>
   );
+}
+
+/* ── 휴차 처리 모달 (commodify | idle 이벤트 push) ── */
+function IdleProcessDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { user } = useAuth();
+  const [carNumber, setCarNumber] = useState('');
+  const [kind, setKind] = useState<'idle' | 'commodify'>('idle');
+  const [reason, setReason] = useState('');
+  const [memo, setMemo] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const reset = () => {
+    setCarNumber('');
+    setKind('idle');
+    setReason('');
+    setMemo('');
+  };
+
+  const onSave = async () => {
+    if (!carNumber) {
+      toast.error('차량번호를 입력하세요');
+      return;
+    }
+    setBusy(true);
+    try {
+      await saveEvent({
+        type: kind, // 'idle' or 'commodify'
+        date: todayStr(),
+        title: kind === 'commodify' ? '상품화 처리' : '휴차 처리',
+        car_number: sanitizeCarNumber(carNumber),
+        memo: [reason, memo].filter(Boolean).join(' / ') || undefined,
+        handler_uid: user?.uid,
+        handler: user?.displayName ?? user?.email ?? undefined,
+      });
+      toast.success(kind === 'commodify' ? '상품화 처리 완료' : '휴차 처리 완료');
+      reset();
+      onClose();
+    } catch (e) {
+      toast.error(`저장 실패: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <EditDialog
+      open={open}
+      title="휴차 처리"
+      subtitle="차량 상태를 휴차/상품화로 변경"
+      onClose={() => {
+        reset();
+        onClose();
+      }}
+      onSave={onSave}
+      saving={busy}
+      width={460}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <label>
+          <div style={dialogLbl()}>차량번호 *</div>
+          <input
+            type="text"
+            value={carNumber}
+            onChange={(e) => setCarNumber(e.target.value)}
+            placeholder="12가 3456"
+            style={dialogInput()}
+          />
+        </label>
+        <label>
+          <div style={dialogLbl()}>종류</div>
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value as 'idle' | 'commodify')}
+            style={dialogInput()}
+          >
+            <option value="idle">휴차 (운행 중지)</option>
+            <option value="commodify">상품화 (재임대 준비)</option>
+          </select>
+        </label>
+        <label>
+          <div style={dialogLbl()}>사유</div>
+          <input
+            type="text"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="만기반납 / 사고복귀 / 정비대기 등"
+            style={dialogInput()}
+          />
+        </label>
+        <label>
+          <div style={dialogLbl()}>메모</div>
+          <textarea
+            value={memo}
+            onChange={(e) => setMemo(e.target.value)}
+            rows={2}
+            style={dialogInput()}
+          />
+        </label>
+      </div>
+    </EditDialog>
+  );
+}
+
+function dialogLbl(): React.CSSProperties {
+  return { fontSize: 11, color: 'var(--c-text-sub)', marginBottom: 2, fontWeight: 600 };
+}
+function dialogInput(): React.CSSProperties {
+  return {
+    width: '100%',
+    padding: '6px 8px',
+    border: '1px solid var(--c-border)',
+    background: 'var(--c-surface)',
+    color: 'var(--c-text)',
+    fontFamily: 'inherit',
+    fontSize: 13,
+    borderRadius: 2,
+  };
 }
 
 /* ═════════ 미결 derive 로직 ═════════ */

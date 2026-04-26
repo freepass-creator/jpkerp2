@@ -13,7 +13,8 @@ import * as cardShinhan from '@/lib/parsers/card-shinhan';
 import type { RtdbBilling, RtdbEvent } from '@/lib/types/rtdb-entities';
 import { fmt } from '@/lib/utils';
 import Link from 'next/link';
-import { useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { LedgerClient } from './ledger-client';
 
@@ -43,15 +44,36 @@ const TAB_CRUMB: Record<SubpageId, string> = {
   'finance-tax-invoice': '세금계산서',
 };
 
+/** URL `?tab=` 약자 → 내부 SubpageId */
+const TAB_ALIAS: Record<string, SubpageId> = {
+  list: 'finance-list',
+  bank: 'finance-list',
+  daily: 'finance-daily',
+  'tax-invoice': 'finance-tax-invoice',
+  tax: 'finance-tax-invoice',
+};
+
 export default function FinancePage() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab') ?? '';
+  const filterParam = searchParams.get('filter') ?? '';
+  const initialTab = TAB_ALIAS[tabParam] ?? 'finance-list';
+
   const gridRef = useRef<JpkGridApi<RtdbEvent> | null>(null);
-  const [active, setActive] = useState<SubpageId>('finance-list');
+  const [active, setActive] = useState<SubpageId>(initialTab);
   const [count, setCount] = useState(0);
   const [csvOpen, setCsvOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
+  const [dailyOpen, setDailyOpen] = useState(false);
 
   const events = useRtdbCollection<RtdbEvent>('events');
   const billings = useRtdbCollection<RtdbBilling>('billings');
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tabParam만 추적
+  useEffect(() => {
+    const next = TAB_ALIAS[tabParam];
+    if (next && next !== active) setActive(next);
+  }, [tabParam]);
 
   const alerts = useMemo(
     () => deriveFinanceAlerts(events.data, billings.data),
@@ -64,8 +86,8 @@ export default function FinancePage() {
 
   const onPrimary = () => {
     if (active === 'finance-list') setCsvOpen(true);
-    else if (active === 'finance-daily') toast.info('자금일보 작성은 다음 단계에서 구현 예정');
-    else toast.info('세금계산서 발행은 다음 단계에서 구현 예정');
+    else if (active === 'finance-daily') setDailyOpen(true);
+    else toast.info('세금계산서는 아래 카드에서 발행하세요');
   };
 
   return (
@@ -103,6 +125,11 @@ export default function FinancePage() {
 
       <CsvUploadDialog open={csvOpen} onClose={() => setCsvOpen(false)} />
       <ManualTxDialog open={manualOpen} onClose={() => setManualOpen(false)} />
+      <DailyReportDialog
+        open={dailyOpen}
+        onClose={() => setDailyOpen(false)}
+        events={events.data}
+      />
 
       {active === 'finance-list' ? (
         <FinanceListSubpage
@@ -113,11 +140,17 @@ export default function FinancePage() {
           gridRef={gridRef}
           onCountChange={setCount}
           count={count}
+          filter={filterParam}
         />
       ) : active === 'finance-daily' ? (
-        <DailyReportSubpage rows={dailyRows} loading={events.loading} />
+        <DailyReportSubpage
+          rows={dailyRows}
+          loading={events.loading}
+          events={events.data}
+          onWriteClick={() => setDailyOpen(true)}
+        />
       ) : (
-        <TaxInvoiceSubpage />
+        <TaxInvoiceSubpage events={events.data} billings={billings.data} />
       )}
     </>
   );
@@ -132,6 +165,7 @@ function FinanceListSubpage({
   gridRef,
   onCountChange,
   count,
+  filter,
 }: {
   loading: boolean;
   error: Error | null;
@@ -140,7 +174,10 @@ function FinanceListSubpage({
   gridRef: React.RefObject<JpkGridApi<RtdbEvent> | null>;
   onCountChange: (n: number) => void;
   count: number;
+  filter?: string;
 }) {
+  // filter='unmatched' → 미매칭 행만 표시 hint (현재는 표시만)
+  void filter;
   const isClear = alerts.length === 0;
   const totalAlerts = alerts.reduce((sum, a) => sum + a.count, 0);
 
@@ -208,32 +245,43 @@ function FinanceListSubpage({
   );
 }
 
-/* ── 자금일보 sub-page (placeholder + 일자별 합계) ── */
+/* ── 자금일보 sub-page (작성 모달 호출 + 일자별 합계) ── */
 function DailyReportSubpage({
   rows,
   loading,
+  events,
+  onWriteClick,
 }: {
   rows: DailyRow[];
   loading: boolean;
+  events: readonly RtdbEvent[];
+  onWriteClick: () => void;
 }) {
   const tStr = todayStr();
-  const todayWritten = rows.some((r) => r.date === tStr);
+  // 자금일보 작성 여부는 daily_finance_report 이벤트로 판단 (rows는 거래 derive)
+  const todayReportWritten = events.some(
+    (e) =>
+      e.date === tStr &&
+      (e.type === 'daily_finance_report' || e.type === 'fund_daily') &&
+      e.status !== 'deleted',
+  );
+  const todayHasTx = rows.some((r) => r.date === tStr);
 
   return (
     <div className="v3-subpage is-active">
-      <div className={`v3-alerts ${todayWritten ? 'is-clear' : ''}`}>
+      <div className={`v3-alerts ${todayReportWritten ? 'is-clear' : ''}`}>
         <div className="v3-alerts-head">
           <span className="dot" />
           <span className="title">
-            {todayWritten ? `자금일보 — ${tStr} 작성 완료` : '자금일보 미작성'}
+            {todayReportWritten ? `자금일보 — ${tStr} 작성 완료` : '자금일보 미작성'}
           </span>
           <span className="count">
-            {todayWritten
+            {todayReportWritten
               ? `· ${rows.find((r) => r.date === tStr)?.count ?? 0}건 거래`
-              : `· 오늘(${tStr}) 자금일보 필요`}
+              : `· 오늘(${tStr}) 자금일보 필요${todayHasTx ? ' · 거래 있음' : ''}`}
           </span>
         </div>
-        {!todayWritten && (
+        {!todayReportWritten && (
           <div className="v3-alerts-grid">
             <div className="v3-alert-card is-danger">
               <i className="ph ph-coins ico" />
@@ -241,7 +289,7 @@ function DailyReportSubpage({
                 <div className="head">오늘 자금일보 미작성</div>
                 <div className="desc">거래 입력 후 자금일보 작성 → 일자별 수입·지출 마감</div>
               </div>
-              <button type="button" className="alert-btn">
+              <button type="button" className="alert-btn" onClick={onWriteClick}>
                 작성
               </button>
             </div>
@@ -328,18 +376,351 @@ function DailyReportSubpage({
   );
 }
 
-/* ── 세금계산서 sub-page (placeholder) ── */
-function TaxInvoiceSubpage() {
+/* ── 세금계산서 sub-page (회원사·월별 derived) ── */
+function TaxInvoiceSubpage({
+  events,
+  billings,
+}: {
+  events: readonly RtdbEvent[];
+  billings: readonly RtdbBilling[];
+}) {
+  const { user } = useAuth();
+  const [busy, setBusy] = useState<string | null>(null);
+  const tStr = todayStr();
+  const thisMonth = tStr.slice(0, 7);
+  const [ym, setYm] = useState(thisMonth);
+
+  // 회원사·월별 수납 합계 derive
+  const partnerRows = useMemo(() => {
+    const map = new Map<string, { partner_code: string; total: number; bills: number }>();
+    for (const b of billings) {
+      if (!b.partner_code) continue;
+      const paid = Number(b.paid_total ?? 0);
+      if (paid <= 0) continue;
+      if (!(b.due_date ?? '').startsWith(ym)) continue;
+      const r = map.get(b.partner_code) ?? { partner_code: b.partner_code, total: 0, bills: 0 };
+      r.total += paid;
+      r.bills += 1;
+      map.set(b.partner_code, r);
+    }
+    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+  }, [billings, ym]);
+
+  const issuedSet = useMemo(() => {
+    const s = new Set<string>();
+    for (const e of events) {
+      if (e.type !== 'tax_invoice' || e.status === 'deleted') continue;
+      if (!(e.date ?? '').startsWith(ym)) continue;
+      const pc = (e as { partner_code?: string }).partner_code;
+      if (pc) s.add(pc);
+    }
+    return s;
+  }, [events, ym]);
+
+  const onIssue = async (partner_code: string, total: number) => {
+    setBusy(partner_code);
+    try {
+      await saveEvent({
+        type: 'tax_invoice',
+        date: tStr,
+        title: `${partner_code} ${ym} 세금계산서`,
+        partner_code,
+        // 아래 필드는 RtdbEvent 명시 안 됨 — Phase 2에서 e세로 연동시 정형화
+        amount: total,
+        // ym/total/status는 indexed signature로 저장됨
+        ym,
+        total,
+        memo: 'manual_recorded',
+        match_status: 'manual_recorded',
+        handler_uid: user?.uid,
+        handler: user?.displayName ?? user?.email ?? undefined,
+      } as Partial<RtdbEvent> & { type: string });
+      toast.success(`${partner_code} ${ym} 세금계산서 발행 기록 완료`);
+    } catch (e) {
+      toast.error(`발행 실패: ${(e as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const unissued = partnerRows.filter((r) => !issuedSet.has(r.partner_code));
+  const issued = partnerRows.filter((r) => issuedSet.has(r.partner_code));
+
   return (
     <div className="v3-subpage is-active">
-      <div className="v3-placeholder">
-        <i className="ph ph-receipt" />
-        <div className="title">세금계산서 준비 중</div>
-        <div className="desc">
-          billings 수납분 ↔ tax_invoice 이벤트 비교로 미발행 자동 추출 (홈택스 e세로 연동 예정)
+      <div className={`v3-alerts ${unissued.length === 0 ? 'is-clear' : ''}`}>
+        <div className="v3-alerts-head">
+          <span className="dot" />
+          <span className="title">
+            세금계산서 — {ym} {unissued.length === 0 ? '발행 완료' : `미발행 ${unissued.length}건`}
+          </span>
+          <span className="count">
+            · 회원사 {partnerRows.length}곳 · 발행 {issued.length} / 미발행 {unissued.length}
+          </span>
+        </div>
+        <div style={{ padding: '8px 12px', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ fontSize: 11, color: 'var(--c-text-sub)' }}>대상월</span>
+          <input
+            type="month"
+            value={ym}
+            onChange={(e) => setYm(e.target.value)}
+            style={{
+              padding: '4px 8px',
+              border: '1px solid var(--c-border)',
+              fontSize: 12,
+              background: 'var(--c-surface)',
+              color: 'var(--c-text)',
+              borderRadius: 2,
+            }}
+          />
+          <span style={{ fontSize: 11, color: 'var(--c-text-muted)' }}>
+            (e세로 API 연동은 Phase 2 — 현재는 발행 기록만)
+          </span>
+        </div>
+      </div>
+
+      <div className="v3-table-wrap">
+        {partnerRows.length === 0 ? (
+          <div className="v3-loading">{ym} 월 수납 회원사가 없습니다.</div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr
+                style={{
+                  background: 'var(--c-bg-soft)',
+                  borderBottom: '1px solid var(--c-border)',
+                }}
+              >
+                <th style={cellTh(120)}>회원사</th>
+                <th style={cellTh(72)}>청구건</th>
+                <th style={{ ...cellTh(120), textAlign: 'right' }}>수납합계</th>
+                <th style={cellTh(96)}>발행상태</th>
+                <th style={cellTh(96)}>액션</th>
+              </tr>
+            </thead>
+            <tbody>
+              {partnerRows.map((r) => {
+                const isIssued = issuedSet.has(r.partner_code);
+                return (
+                  <tr key={r.partner_code} style={{ borderBottom: '1px solid var(--c-border)' }}>
+                    <td style={cellTd()}>{r.partner_code}</td>
+                    <td style={cellTd()}>{r.bills}건</td>
+                    <td style={{ ...cellTd(), textAlign: 'right', fontWeight: 600 }}>
+                      {fmt(r.total)}
+                    </td>
+                    <td style={cellTd()}>
+                      {isIssued ? (
+                        <span style={{ color: 'var(--c-emerald)' }}>발행 완료</span>
+                      ) : (
+                        <span style={{ color: 'var(--c-warn)' }}>미발행</span>
+                      )}
+                    </td>
+                    <td style={cellTd()}>
+                      {isIssued ? (
+                        <span style={{ color: 'var(--c-text-muted)' }}>—</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => onIssue(r.partner_code, r.total)}
+                          disabled={busy === r.partner_code}
+                          style={{
+                            padding: '4px 12px',
+                            background: 'var(--c-accent)',
+                            color: 'var(--c-text-inv)',
+                            border: '1px solid var(--c-accent)',
+                            borderRadius: 2,
+                            cursor: 'pointer',
+                            fontSize: 11,
+                          }}
+                        >
+                          {busy === r.partner_code ? '발행 중...' : '발행'}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="v3-table-foot">
+        <div>
+          {ym} 월 수납분 — 회원사별 합계
+          <span className="sep">│</span>
+          <span className="v3-stat-mut">발행은 events.type=tax_invoice 이벤트로 기록</span>
         </div>
       </div>
     </div>
+  );
+}
+
+/* ── 자금일보 작성 모달 ── */
+function DailyReportDialog({
+  open,
+  onClose,
+  events,
+}: {
+  open: boolean;
+  onClose: () => void;
+  events: readonly RtdbEvent[];
+}) {
+  const { user } = useAuth();
+  const [date, setDate] = useState(todayStr());
+  const [memo, setMemo] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  // 해당 일자의 거래 자동 집계
+  const summary = useMemo(() => {
+    let inflow = 0;
+    let outflow = 0;
+    let count = 0;
+    let matched = 0;
+    for (const e of events) {
+      if (e.type !== 'bank_tx' && e.type !== 'card_tx') continue;
+      if (e.status === 'deleted') continue;
+      if ((e.date ?? '').slice(0, 10) !== date) continue;
+      count += 1;
+      const amt = Number(e.amount ?? 0);
+      if (amt > 0) inflow += amt;
+      else outflow += -amt;
+      if (e.match_status === 'matched') matched += 1;
+    }
+    const matchRate = count > 0 ? Math.round((matched / count) * 100) : 0;
+    return { inflow, outflow, count, matched, matchRate };
+  }, [events, date]);
+
+  // 이미 작성된 일자 확인
+  const alreadyWritten = useMemo(
+    () =>
+      events.some(
+        (e) =>
+          (e.type === 'daily_finance_report' || e.type === 'fund_daily') &&
+          e.date === date &&
+          e.status !== 'deleted',
+      ),
+    [events, date],
+  );
+
+  const reset = () => {
+    setDate(todayStr());
+    setMemo('');
+  };
+
+  const onSave = async () => {
+    if (!date) {
+      toast.error('일자를 선택하세요');
+      return;
+    }
+    if (alreadyWritten) {
+      toast.error(`${date} 자금일보가 이미 작성됨`);
+      return;
+    }
+    setBusy(true);
+    try {
+      await saveEvent({
+        type: 'daily_finance_report',
+        date,
+        title: `자금일보 ${date}`,
+        amount: summary.inflow - summary.outflow,
+        memo: memo || undefined,
+        // 집계 결과 보존
+        inflow: summary.inflow,
+        outflow: summary.outflow,
+        tx_count: summary.count,
+        matched_count: summary.matched,
+        match_rate: summary.matchRate,
+        handler_uid: user?.uid,
+        handler: user?.displayName ?? user?.email ?? undefined,
+      } as Partial<RtdbEvent> & { type: string });
+      toast.success(`자금일보 ${date} 작성 완료`);
+      reset();
+      onClose();
+    } catch (e) {
+      toast.error(`저장 실패: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <EditDialog
+      open={open}
+      title="자금일보 작성"
+      subtitle="일자별 수입·지출·매칭률 자동 집계 + 마감"
+      onClose={() => {
+        reset();
+        onClose();
+      }}
+      onSave={onSave}
+      saving={busy}
+      width={520}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <label>
+          <div style={lblStyle()}>일자 *</div>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            style={inputStyle()}
+          />
+        </label>
+
+        <div
+          style={{
+            border: '1px solid var(--c-border)',
+            background: 'var(--c-bg-soft)',
+            padding: 12,
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: 8,
+            fontSize: 12,
+          }}
+        >
+          <div>
+            <div style={{ color: 'var(--c-text-sub)', fontSize: 11 }}>수입</div>
+            <div style={{ color: 'var(--c-emerald)', fontWeight: 600, fontSize: 14 }}>
+              +{fmt(summary.inflow)}
+            </div>
+          </div>
+          <div>
+            <div style={{ color: 'var(--c-text-sub)', fontSize: 11 }}>지출</div>
+            <div style={{ color: 'var(--c-err)', fontWeight: 600, fontSize: 14 }}>
+              -{fmt(summary.outflow)}
+            </div>
+          </div>
+          <div>
+            <div style={{ color: 'var(--c-text-sub)', fontSize: 11 }}>거래수</div>
+            <div style={{ fontWeight: 600 }}>{summary.count}건</div>
+          </div>
+          <div>
+            <div style={{ color: 'var(--c-text-sub)', fontSize: 11 }}>매칭률</div>
+            <div style={{ fontWeight: 600 }}>
+              {summary.matched} / {summary.count} ({summary.matchRate}%)
+            </div>
+          </div>
+        </div>
+
+        <label>
+          <div style={lblStyle()}>메모</div>
+          <textarea
+            value={memo}
+            onChange={(e) => setMemo(e.target.value)}
+            rows={3}
+            placeholder="특이사항·결산 요약"
+            style={inputStyle()}
+          />
+        </label>
+
+        {alreadyWritten && (
+          <div style={{ color: 'var(--c-warn)', fontSize: 12 }}>
+            ⚠ {date} 자금일보가 이미 작성되어 있습니다.
+          </div>
+        )}
+      </div>
+    </EditDialog>
   );
 }
 

@@ -564,3 +564,46 @@ export const CATEGORY_META: Record<
   자산: { icon: 'ph-car-simple', gotoLabel: '자산관리로 →', gotoMenu: 'asset' },
   업무: { icon: 'ph-notebook', gotoLabel: '업무일지로 →', gotoMenu: 'journal' },
 };
+
+/* ═════════ 사이드바 카운트 (카테고리별 합계) ═════════ */
+export interface GapCheckCounts {
+  /** 미결 건수 합계 (전체) */
+  pending: number;
+  /** 재무 카테고리 합계 → 재무관리 메뉴 뱃지 */
+  finance: number;
+  /** 계약 카테고리 합계 → 계약관리 메뉴 뱃지 */
+  contract: number;
+  /** 자산 카테고리 합계 → 자산관리 메뉴 뱃지 */
+  asset: number;
+  /** 업무 카테고리 합계 → 업무관리 메뉴 뱃지 */
+  journal: number;
+}
+
+/** PendingItem[] → 사이드바용 카운트 5종 */
+export function getCategoryCounts(items: readonly PendingItem[]): GapCheckCounts {
+  const out: GapCheckCounts = {
+    pending: 0,
+    finance: 0,
+    contract: 0,
+    asset: 0,
+    journal: 0,
+  };
+  for (const it of items) {
+    out.pending += it.count;
+    switch (it.category) {
+      case '재무':
+        out.finance += it.count;
+        break;
+      case '계약':
+        out.contract += it.count;
+        break;
+      case '자산':
+        out.asset += it.count;
+        break;
+      case '업무':
+        out.journal += it.count;
+        break;
+    }
+  }
+  return out;
+}

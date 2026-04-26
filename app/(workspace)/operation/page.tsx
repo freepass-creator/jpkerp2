@@ -9,10 +9,13 @@
  */
 
 import { useAuth } from '@/lib/auth/context';
+import { useRtdbCollection } from '@/lib/collections/rtdb';
 import { saveEvent } from '@/lib/firebase/events';
 import { uploadFiles } from '@/lib/firebase/storage';
 import { sanitizeCarNumber } from '@/lib/format-input';
-import { type ReactNode, useCallback, useState } from 'react';
+import type { RtdbBilling } from '@/lib/types/rtdb-entities';
+import { useSearchParams } from 'next/navigation';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 type SubpageId =
@@ -76,9 +79,63 @@ function todayStr(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** URL `?tab=` 약자 → 내부 SubpageId 매핑 (gap-check route와 호환) */
+const TAB_ALIAS: Record<string, SubpageId> = {
+  upload: 'journal-upload',
+  eungdae: 'journal-eungdae',
+  consultation: 'journal-eungdae',
+  suseon: 'journal-suseon',
+  repair: 'journal-suseon',
+  sago: 'journal-sago',
+  accident: 'journal-sago',
+  chulgo: 'journal-chulgo',
+  release: 'journal-chulgo',
+  banab: 'journal-banab',
+  return: 'journal-banab',
+  sidong: 'journal-sidong',
+  ignition: 'journal-sidong',
+  iyong: 'journal-iyong',
+  memo: 'journal-memo',
+  yocheong: 'journal-yocheong',
+  request: 'journal-yocheong',
+  received: 'journal-received',
+  sent: 'journal-sent',
+};
+
+export interface OperationPrefill {
+  topic?: string;
+  contract?: string;
+  car?: string;
+  filter?: string;
+  action?: string;
+}
+
 export default function OperationPage() {
-  const [active, setActive] = useState<SubpageId>('journal-upload');
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab') ?? '';
+  const initialTab = TAB_ALIAS[tabParam] ?? 'journal-upload';
+
+  const [active, setActive] = useState<SubpageId>(initialTab);
   const activeTab = TABS.find((t) => t.id === active) ?? TABS[0];
+
+  // URL `tab` 변경 시 sub-tab 동기화 (브라우저 back/forward 대응)
+  // 사용자 클릭으로 active가 바뀐 경우 URL은 따라갈 필요 없음 — active 의존성 제외
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 의도적으로 tabParam만 추적
+  useEffect(() => {
+    const next = TAB_ALIAS[tabParam];
+    if (next && next !== active) setActive(next);
+  }, [tabParam]);
+
+  const prefill: OperationPrefill = useMemo(
+    () => ({
+      topic: searchParams.get('topic') ?? undefined,
+      contract: searchParams.get('contract') ?? undefined,
+      car: searchParams.get('car') ?? undefined,
+      filter: searchParams.get('filter') ?? undefined,
+      action: searchParams.get('action') ?? undefined,
+    }),
+    [searchParams],
+  );
 
   return (
     <>
@@ -105,12 +162,12 @@ export default function OperationPage() {
       </div>
 
       {active === 'journal-upload' && <UploadWizard />}
-      {active === 'journal-eungdae' && <EungdaeWizard />}
+      {active === 'journal-eungdae' && <EungdaeWizard prefill={prefill} />}
       {active === 'journal-suseon' && <SuseonWizard />}
-      {active === 'journal-sago' && <SagoWizard />}
+      {active === 'journal-sago' && <SagoWizard prefill={prefill} />}
       {active === 'journal-chulgo' && <ChulgoWizard />}
       {active === 'journal-banab' && <BanabWizard />}
-      {active === 'journal-sidong' && <SidongWizard />}
+      {active === 'journal-sidong' && <SidongWizard prefill={prefill} />}
       {active === 'journal-iyong' && <IyongWizard />}
       {active === 'journal-memo' && <MemoWizard />}
       {active === 'journal-yocheong' && <YocheongWizard />}
@@ -394,13 +451,38 @@ function UploadWizard() {
 /* ════════════════════════════════════════════════
    2. 고객응대
    ════════════════════════════════════════════════ */
-function EungdaeWizard() {
+function EungdaeWizard({ prefill }: { prefill?: OperationPrefill }) {
   const { saving, save } = useWizardSave();
+  const billings = useRtdbCollection<RtdbBilling>('billings');
+
+  // filter=overdue 일 때 가장 오래된 미납자 자동 선택 (target 비어있을 때만)
+  const oldestOverdue = useMemo(() => {
+    if (prefill?.filter !== 'overdue') return undefined;
+    const t = todayStr();
+    const overdue = billings.data.filter((b) => {
+      const amount = Number(b.amount ?? 0);
+      const paid = Number(b.paid_total ?? 0);
+      if (amount <= 0 || paid >= amount) return false;
+      if (!b.due_date || b.due_date >= t) return false;
+      return Boolean(b.contract_code);
+    });
+    overdue.sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''));
+    return overdue[0]?.contract_code;
+  }, [prefill?.filter, billings.data]);
+
+  const initialTarget = prefill?.contract ?? prefill?.car ?? oldestOverdue ?? '';
+
   const [channel, setChannel] = useState<readonly string[]>(['전화']);
-  const [target, setTarget] = useState('');
-  const [topic, setTopic] = useState<readonly string[]>(['미납독촉']);
+  const [target, setTarget] = useState(initialTarget);
+  const [topic, setTopic] = useState<readonly string[]>([prefill?.topic ?? '미납독촉']);
   const [actions, setActions] = useState<readonly string[]>([]);
   const [memo, setMemo] = useState('');
+
+  // billings 로드 후 oldestOverdue 결정되면 자동 채움 (target이 비어있을 때만)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: target 비교는 초기 상태 전용
+  useEffect(() => {
+    if (!target && oldestOverdue) setTarget(oldestOverdue);
+  }, [oldestOverdue]);
 
   const reset = () => {
     setChannel(['전화']);
@@ -618,9 +700,9 @@ function SuseonWizard() {
 /* ════════════════════════════════════════════════
    4. 사고접수
    ════════════════════════════════════════════════ */
-function SagoWizard() {
+function SagoWizard({ prefill }: { prefill?: OperationPrefill }) {
   const { saving, save } = useWizardSave();
-  const [target, setTarget] = useState('');
+  const [target, setTarget] = useState(prefill?.car ?? prefill?.contract ?? '');
   const [occurredAt, setOccurredAt] = useState('');
   const [location, setLocation] = useState('');
   const [accidentType, setAccidentType] = useState<readonly string[]>(['쌍방']);
@@ -1004,10 +1086,16 @@ function BanabWizard() {
 /* ════════════════════════════════════════════════
    7. 시동제어
    ════════════════════════════════════════════════ */
-function SidongWizard() {
+function SidongWizard({ prefill }: { prefill?: OperationPrefill }) {
   const { saving, save } = useWizardSave();
-  const [target, setTarget] = useState('');
-  const [action, setAction] = useState<readonly string[]>(['시동 제어']);
+  const [target, setTarget] = useState(prefill?.car ?? prefill?.contract ?? '');
+  const initialAction =
+    prefill?.action === 'unlock'
+      ? '제어 해제'
+      : prefill?.action === 'lock'
+        ? '시동 제어'
+        : '시동 제어';
+  const [action, setAction] = useState<readonly string[]>([initialAction]);
   const [reason, setReason] = useState<readonly string[]>(['미납 60일+']);
   const [memo, setMemo] = useState('');
 

@@ -4,7 +4,8 @@ import type { JpkGridApi } from '@/components/shared/jpk-grid';
 import { AssetDetailPanel } from '@/components/v3/AssetDetailPanel';
 import { useRtdbCollection } from '@/lib/collections/rtdb';
 import Link from 'next/link';
-import { useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AssetsGrid } from './assets-grid';
 
 type AssetRow = {
@@ -57,11 +58,32 @@ const TAB_CRUMB: Record<SubpageId, string> = {
   'asset-disposal': '처분',
 };
 
+/** URL `?tab=` 약자 → 내부 SubpageId */
+const TAB_ALIAS: Record<string, SubpageId> = {
+  list: 'asset-list',
+  insurance: 'asset-insurance',
+  repair: 'asset-repair',
+  inspection: 'asset-inspection',
+  tax: 'asset-tax',
+  disposal: 'asset-disposal',
+};
+
 export default function AssetPage() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab') ?? '';
+  const filterParam = searchParams.get('filter') ?? '';
+  const initialTab = TAB_ALIAS[tabParam] ?? 'asset-list';
+
   const gridRef = useRef<JpkGridApi<AssetRow> | null>(null);
-  const [active, setActive] = useState<SubpageId>('asset-list');
+  const [active, setActive] = useState<SubpageId>(initialTab);
   const [detailRow, setDetailRow] = useState<AssetRow | null>(null);
   const assets = useRtdbCollection<AssetRow>('assets');
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tabParam만 추적
+  useEffect(() => {
+    const next = TAB_ALIAS[tabParam];
+    if (next && next !== active) setActive(next);
+  }, [tabParam]);
 
   const stats = useMemo(() => deriveStats(assets.data), [assets.data]);
   const alerts = useMemo(() => deriveAlerts(assets.data), [assets.data]);
@@ -127,7 +149,7 @@ export default function AssetPage() {
           onRowClick={setDetailRow}
         />
       ) : (
-        <PlaceholderSubpage label={activeTab.label} />
+        <PlaceholderSubpage label={activeTab.label} filter={filterParam || undefined} />
       )}
 
       <AssetDetailPanel asset={detailRow} onClose={() => setDetailRow(null)} />
@@ -230,13 +252,16 @@ function AssetListSubpage({
 }
 
 /* ── 미구현 sub-page placeholder ── */
-function PlaceholderSubpage({ label }: { label: string }) {
+function PlaceholderSubpage({ label, filter }: { label: string; filter?: string }) {
   return (
     <div className="v3-subpage is-active">
       <div className="v3-placeholder">
         <i className="ph ph-hourglass-medium" />
         <div className="title">{label} 준비 중</div>
-        <div className="desc">차량 단위로 통합된 {label} 관리 화면을 구현 중입니다.</div>
+        <div className="desc">
+          차량 단위로 통합된 {label} 관리 화면을 구현 중입니다.
+          {filter ? ` (적용 필터: ${filter})` : ''}
+        </div>
       </div>
     </div>
   );
